@@ -43,9 +43,10 @@ with left:
   with st.container(border=True):
     st.session_state.mode=st.radio("Replay 模式",["Manual Replay","Dynamic Replay"],horizontal=True,index=0 if st.session_state.mode=="Manual Replay" else 1)
     if st.session_state.mode=="Dynamic Replay":
-      st.session_state.dynamic_seconds=st.slider("每日行情秒數",4,20,st.session_state.dynamic_seconds)
-      st.session_state.decision_count=st.slider("每日決策暫停次數",0,4,st.session_state.decision_count)
-      st.session_state.decision_seconds=st.slider("決策倒數秒數",3,10,st.session_state.decision_seconds)
+      with st.expander("⚙ 動態回放設定",expanded=False):
+        st.session_state.dynamic_seconds=st.slider("每日行情秒數",4,20,st.session_state.dynamic_seconds)
+        st.session_state.decision_count=st.slider("每日決策暫停次數",0,4,st.session_state.decision_count)
+        st.session_state.decision_seconds=st.slider("決策倒數秒數",3,10,st.session_state.decision_seconds)
       a,b=st.columns(2)
       if a.button("▶ 開始 / 繼續",use_container_width=True): st.session_state.running=True; st.session_state.last_tick=time.time(); st.rerun()
       if b.button("⏸ 暫停",use_container_width=True): st.session_state.running=False; st.rerun()
@@ -55,29 +56,10 @@ with left:
       a,b=st.columns(2)
       if a.button("▶ 下一根",use_container_width=True): st.session_state.i=min(len(df)-1,st.session_state.i+1); st.session_state.progress=0; st.rerun()
       if b.button("⏩ +5 根",use_container_width=True): st.session_state.i=min(len(df)-1,st.session_state.i+5); st.session_state.progress=0; st.rerun()
-    st.markdown("### 交易操作")
-    reasons=st.multiselect("交易理由",["趨勢","回撤","突破","支撐","壓力","均線","RSI","OB","BOS","Liquidity Sweep","其他"],placeholder="選擇交易理由")
-    st.session_state.qty=int(st.number_input("數量",min_value=1,value=int(st.session_state.qty),step=1))
-    sl,tp=st.columns(2)
-    st.session_state.sl_pct=sl.number_input("SL %",min_value=0.,step=.1,key="sl_input")
-    st.session_state.tp_pct=tp.number_input("TP %",min_value=0.,step=.1,key="tp_input")
-    buy,sell=st.columns(2)
-    if buy.button("⬆ BUY 做多",use_container_width=True):
-      st.session_state.running=False; open_position(st.session_state,1,reasons); st.session_state.running=(st.session_state.mode=="Dynamic Replay"); st.session_state.last_tick=time.time(); st.rerun()
-    if sell.button("⬇ SELL 做空",use_container_width=True):
-      st.session_state.running=False; open_position(st.session_state,-1,reasons); st.session_state.running=(st.session_state.mode=="Dynamic Replay"); st.session_state.last_tick=time.time(); st.rerun()
-    x,y,z=st.columns(3)
-    if x.button("✕ 平倉",use_container_width=True): st.session_state.running=False; close_position(st.session_state,"Manual",reasons); st.session_state.running=(st.session_state.mode=="Dynamic Replay"); st.session_state.last_tick=time.time(); st.rerun()
-    if y.button("＋ 加碼",use_container_width=True) and st.session_state.pos: st.session_state.qty+=1; st.session_state.running=False; st.rerun()
-    if z.button("－ 減碼",use_container_width=True) and st.session_state.pos: st.session_state.qty=max(1,st.session_state.qty-1); st.session_state.running=False; st.rerun()
-    status="FLAT" if not st.session_state.pos else ("LONG" if st.session_state.pos==1 else "SHORT")
-    if st.session_state.pos:
-      upnl=(float(st.session_state.current_bar.Close)-st.session_state.entry)/st.session_state.entry*st.session_state.pos*100
-      st.caption(f"部位：{status} ｜ 未實現：{upnl:+.2f}%")
-    else: st.caption("部位：FLAT")
-
 with right:
-  with st.container(border=True):
+  chart_col, trade_col = st.columns([7.3,2.7],gap="small")
+  with chart_col:
+   with st.container(border=True):
     row=st.session_state.current_bar
     h1,h2,h3=st.columns([2.1,1.2,4.7]); h1.markdown("### 2330 台積電"); h2.markdown(f"**{row.Date.date()}**")
     h3.markdown(f"開 {row.Open:.1f}　高 {row.High:.1f}　低 {row.Low:.1f}　現價 **{row.Close:.1f}**")
@@ -98,6 +80,27 @@ with right:
     if q.button("顯示 / 隱藏圖形",use_container_width=True): st.session_state.hidden_drawings=not st.session_state.hidden_drawings; st.rerun()
     if r.button("刪除圖形",use_container_width=True): st.session_state.drawings=[]; st.rerun()
     st.caption("圖表可用左上工具列畫線、矩形、自由畫筆與文字。OHLC-only 動態路徑為合成示意，並非真實盤中歷史。")
+  with trade_col:
+   with st.container(border=True):
+    st.markdown("### 交易操作")
+    reasons=st.multiselect("交易理由",["趨勢","回撤","突破","支撐","壓力","均線","RSI","OB","BOS","Liquidity Sweep","其他"],placeholder="選擇交易理由",key="trade_reasons")
+    st.session_state.qty=int(st.number_input("數量",min_value=1,value=int(st.session_state.qty),step=1))
+    st.session_state.sl_pct=st.number_input("SL %",min_value=0.,step=.1,key="sl_input")
+    st.session_state.tp_pct=st.number_input("TP %",min_value=0.,step=.1,key="tp_input")
+    if st.button("⬆ BUY 做多",use_container_width=True):
+      st.session_state.running=False; open_position(st.session_state,1,reasons); st.session_state.running=(st.session_state.mode=="Dynamic Replay"); st.session_state.last_tick=time.time(); st.rerun()
+    if st.button("⬇ SELL 做空",use_container_width=True):
+      st.session_state.running=False; open_position(st.session_state,-1,reasons); st.session_state.running=(st.session_state.mode=="Dynamic Replay"); st.session_state.last_tick=time.time(); st.rerun()
+    if st.button("✕ 平倉",use_container_width=True):
+      st.session_state.running=False; close_position(st.session_state,"Manual",reasons); st.session_state.running=(st.session_state.mode=="Dynamic Replay"); st.session_state.last_tick=time.time(); st.rerun()
+    a,b=st.columns(2)
+    if a.button("＋ 加碼",use_container_width=True) and st.session_state.pos: st.session_state.qty+=1; st.session_state.running=False; st.rerun()
+    if b.button("－ 減碼",use_container_width=True) and st.session_state.pos: st.session_state.qty=max(1,st.session_state.qty-1); st.session_state.running=False; st.rerun()
+    status="FLAT" if not st.session_state.pos else ("LONG" if st.session_state.pos==1 else "SHORT")
+    if st.session_state.pos:
+      upnl=(float(st.session_state.current_bar.Close)-st.session_state.entry)/st.session_state.entry*st.session_state.pos*100
+      st.caption(f"部位：{status} ｜ 未實現：{upnl:+.2f}%")
+    else: st.caption("部位：FLAT")
 
 trades=pd.DataFrame(st.session_state.trades)
 tcol,scol=st.columns([6.5,3.5],gap="small")
