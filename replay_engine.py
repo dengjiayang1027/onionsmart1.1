@@ -16,8 +16,10 @@ def interpolate_bar(row: pd.Series, day_index: int, progress: float) -> dict:
     """Interpolate an evolving candle across Open -> extreme -> extreme -> Close."""
     p = float(np.clip(progress, 0.0, 1.0))
     path = daily_path(row, day_index)
-    segment = min(int(p * 3), 2)
-    local = p * 3 - segment
+    # Four fixed 2-second phases over an 8-second candle:
+    # Open -> first extreme -> second extreme -> Close.
+    segment = min(int(p * 4), 2)
+    local = min(p * 4 - segment, 1.0)
     price = path[segment] + (path[segment + 1] - path[segment]) * local
     visited = path[:segment + 1] + [price]
     return {"Open": path[0], "High": max(visited), "Low": min(visited), "Close": price}
