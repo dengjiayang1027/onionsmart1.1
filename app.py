@@ -15,7 +15,6 @@ html,body,[data-testid="stAppViewContainer"]{background:#08111a;color:#eef5f9}
 div[data-testid="stVerticalBlockBorderWrapper"]>div{background:#0d1822;border:1px solid #223442;border-radius:12px}
 .stButton button{min-height:42px;border-radius:9px;font-weight:800;background:#10202c;color:#f2f7fb}
 .brand{font-size:28px;font-weight:900;padding:2px 4px 8px}.sub{color:#73889a;font-size:13px;margin-left:8px}
-.cardgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.card{background:#111f2a;border:1px solid #223544;border-radius:9px;padding:9px 10px;min-height:56px}.card .k{font-size:12px;color:#8094a4}.card .v{font-size:20px;font-weight:850;margin-top:3px}
 .cardgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}.card{background:#111f2a;border:1px solid #223544;border-radius:9px;padding:8px 9px;min-height:56px}.card .k{font-size:12px;color:#8094a4}.card .v{font-size:18px;font-weight:850;margin-top:3px}
 </style>""", unsafe_allow_html=True)
 
@@ -110,20 +109,10 @@ with right:
     best=float(trades["損益"].max()) if count else 0; worst=float(trades["損益"].min()) if count else 0
     st.markdown(f'<div class="cardgrid"><div class="card"><div class="k">總損益</div><div class="v">{total:+,.0f}</div></div><div class="card"><div class="k">勝率</div><div class="v">{wr:.0f}%</div></div><div class="card"><div class="k">交易次數</div><div class="v">{count}</div></div><div class="card"><div class="k">平均 R</div><div class="v">{avg:.2f}</div></div><div class="card"><div class="k">最大獲利</div><div class="v">{best:+,.0f}</div></div><div class="card"><div class="k">最大虧損</div><div class="v">{worst:+,.0f}</div></div></div>',unsafe_allow_html=True)
 
-trades=pd.DataFrame(st.session_state.trades)
-tcol,scol=st.columns([6.5,3.5],gap="small")
-with tcol:
 with st.container(border=True):
-  with st.container(border=True):
-    st.markdown("### Trade Record")
-    if trades.empty: st.caption("尚無已完成交易。平倉後交易將記錄於此。")
-    else: st.dataframe(trades.iloc[::-1],use_container_width=True,hide_index=True,height=205)
-with scol:
-  with st.container(border=True):
-    st.markdown("### 交易統計")
-    total=float(trades["損益"].sum()) if not trades.empty else 0; wr=float((trades["損益"]>0).mean()*100) if not trades.empty else 0
-    count=len(trades); avg=float(trades["R"].mean()) if count else 0; best=float(trades["損益"].max()) if count else 0; worst=float(trades["損益"].min()) if count else 0
-    st.markdown(f'<div class="cardgrid"><div class="card"><div class="k">總損益</div><div class="v">{total:+,.0f}</div></div><div class="card"><div class="k">勝率</div><div class="v">{wr:.0f}%</div></div><div class="card"><div class="k">交易次數</div><div class="v">{count}</div></div><div class="card"><div class="k">平均 R</div><div class="v">{avg:.2f}</div></div><div class="card"><div class="k">最大獲利</div><div class="v">{best:+,.0f}</div></div><div class="card"><div class="k">最大虧損</div><div class="v">{worst:+,.0f}</div></div></div>',unsafe_allow_html=True)
+  st.markdown("### Trade Record")
+  if trades.empty: st.caption("尚無已完成交易。平倉後交易將記錄於此。")
+  else: st.dataframe(trades.iloc[::-1],use_container_width=True,hide_index=True,height=205)
 
 # Dynamic loop: a Streamlit fragment reruns frequently while its own clock advances the synthetic session.
 if st.session_state.mode=="Dynamic Replay":
