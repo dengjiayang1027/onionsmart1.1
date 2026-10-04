@@ -4,8 +4,8 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 
-from replay_engine import interpolate_bar, decision_progresses
-from trading_engine import open_position, close_position
+from replay_engine import interpolate_bar
+from trading_engine import open_position, close_position, log_order
 
 st.set_page_config(page_title="蔥明錢 Lite", page_icon="🧅", layout="wide", initial_sidebar_state="collapsed")
 st.markdown("""
@@ -25,7 +25,7 @@ def make_data(n=320, seed=12):
     hi=np.maximum(op,close)*(1+rng.uniform(.002,.011,n)); lo=np.minimum(op,close)*(1-rng.uniform(.002,.011,n))
     return pd.DataFrame({"Date":pd.date_range("2023-01-02",periods=n,freq="B"),"Open":op,"High":hi,"Low":lo,"Close":close})
 df=make_data()
-defaults={"i":90,"pos":0,"entry":None,"entry_time":None,"entry_replay":None,"entry_qty":0,"entry_sl":0.,"entry_tp":0.,"trade_mode":"Manual","qty":1,"trades":[],"mode":"Manual Replay","progress":0.,"running":False,"pause_until":0.,"pause_reason":"","last_tick":time.time(),"last_full_refresh":time.time(),"dynamic_seconds":8,"decision_seconds":5,"decision_count":2,"decision_seen":set(),"drawings":[],"hidden_drawings":False,"undo":[]}
+defaults={"i":90,"pos":0,"entry":None,"entry_time":None,"entry_replay":None,"entry_qty":0,"entry_sl":0.,"entry_tp":0.,"trade_mode":"Manual","qty":1,"trades":[],"order_events":[],"mode":"Manual Replay","progress":0.,"running":False,"pause_until":0.,"pause_reason":"","last_tick":time.time(),"last_full_refresh":time.time(),"dynamic_seconds":8,"drawings":[],"hidden_drawings":False,"undo":[]}
 for k,v in defaults.items():
     if k not in st.session_state: st.session_state[k]=v
 
@@ -35,6 +35,12 @@ def current_bar():
         evolving=interpolate_bar(base,st.session_state.i,st.session_state.progress)
         for k,v in evolving.items(): base[k]=v
     return base
+
+def resume_after_trade_action():
+    """Resume the 8-second Dynamic Replay only after the trade action has completed."""
+    st.session_state.running = st.session_state.mode == "Dynamic Replay"
+    st.session_state.last_tick = time.time()
+
 st.session_state.current_bar=current_bar()
 trades=pd.DataFrame(st.session_state.trades)
 
@@ -44,10 +50,7 @@ with left:
   with st.container(border=True):
     st.session_state.mode=st.radio("Replay 模式",["Manual Replay","Dynamic Replay"],horizontal=True,index=0 if st.session_state.mode=="Manual Replay" else 1)
     if st.session_state.mode=="Dynamic Replay":
-      with st.expander("⚙ 動態回放設定",expanded=False):
-        st.session_state.dynamic_seconds=st.slider("每日行情秒數",4,20,st.session_state.dynamic_seconds)
-        st.session_state.decision_count=st.slider("每日決策暫停次數",0,4,st.session_state.decision_count)
-        st.session_state.decision_seconds=st.slider("決策倒數秒數",3,10,st.session_state.decision_seconds)
+      st.caption("每根日 K 固定 8 秒；只有交易操作會暫停行情。")
       a,b=st.columns(2)
       if a.button("▶ 開始 / 繼續",use_container_width=True): st.session_state.running=True; st.session_state.last_tick=time.time(); st.rerun()
       if b.button("⏸ 暫停",use_container_width=True): st.session_state.running=False; st.rerun()
@@ -102,17 +105,26 @@ with right:
     if st.button("✕ 平倉",use_container_width=True):
       st.session_state.running=False; close_position(st.session_state,"Manual",reasons); st.session_state.running=(st.session_state.mode=="Dynamic Replay"); st.session_state.last_tick=time.time(); st.rerun()
     a,b=st.columns(2)
-    if a.button("＋ 加碼",use_container_width=True) and st.session_state.pos: st.session_state.qty+=1; st.session_state.running=False; st.rerun()
-    if b.button("－ 減碼",use_container_width=True) and st.session_state.pos: st.session_state.qty=max(1,st.session_state.qty-1); st.session_state.running=False; st.rerun()
+    if a.button("＋ 加碼",use_container_width=True):
+      st.session_state.running=False
+      if st.session_state.pos:
+        st.session_state.qty+=1; st.session_state.entry_qty+=1; log_order(st.session_state,"加碼",reasons)
+      resume_after_trade_action(); st.rerun()
+    if b.button("－ 減碼",use_container_width=True):
+      st.session_state.running=False
+      if st.session_state.pos and st.session_state.entry_qty>1:
+        st.session_state.qty=max(1,st.session_state.qty-1); st.session_state.entry_qty-=1; log_order(st.session_state,"減碼",reasons)
+      resume_after_trade_action(); st.rerun()
     status="FLAT" if not st.session_state.pos else ("LONG" if st.session_state.pos==1 else "SHORT")
     if st.session_state.pos:
       upnl=(float(st.session_state.current_bar.Close)-st.session_state.entry)/st.session_state.entry*st.session_state.pos*100
       st.caption(f"部位：{status} ｜ 未實現：{upnl:+.2f}%")
     else: st.caption("部位：FLAT")
 with st.container(border=True):
-  st.markdown("### Trade Record")
-  if trades.empty: st.caption("尚無已完成交易。平倉後交易將記錄於此。")
-  else: st.dataframe(trades.iloc[::-1],use_container_width=True,hide_index=True,height=205)
+  st.markdown("### Trade Record｜操作紀錄")
+  order_events=pd.DataFrame(st.session_state.order_events)
+  if order_events.empty: st.caption("尚無交易操作。BUY、SELL、加減碼與平倉都會記錄於此。")
+  else: st.dataframe(order_events.iloc[::-1],use_container_width=True,hide_index=True,height=205)
 
 # Dynamic loop: a Streamlit fragment reruns frequently while its own clock advances the synthetic session.
 if st.session_state.mode=="Dynamic Replay":
@@ -121,11 +133,7 @@ if st.session_state.mode=="Dynamic Replay":
     s=st.session_state; now=time.time()
     if s.running and now>=s.pause_until and s.i<len(df)-1:
       elapsed=max(0.,now-s.last_tick); s.last_tick=now
-      s.progress=min(1.,s.progress+elapsed/max(1,s.dynamic_seconds))
-      marks=decision_progresses(s.decision_count)
-      mark=next((m for m in sorted(marks) if s.progress>=m and (s.i,m) not in s.decision_seen),None)
-      if mark is not None:
-        s.decision_seen.add((s.i,mark)); s.running=False; s.pause_reason="決策時間"; s.pause_until=now+s.decision_seconds
+      s.progress=min(1.,s.progress+elapsed/8.0)
       if s.progress>=1:
         s.i+=1; s.progress=0.; s.last_tick=now
     elif not s.running and s.pause_until and now>=s.pause_until:
