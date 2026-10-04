@@ -57,6 +57,12 @@ with left:
       a,b=st.columns(2)
       if a.button("▶ 下一根",use_container_width=True): st.session_state.i=min(len(df)-1,st.session_state.i+1); st.session_state.progress=0; st.rerun()
       if b.button("⏩ +5 根",use_container_width=True): st.session_state.i=min(len(df)-1,st.session_state.i+5); st.session_state.progress=0; st.rerun()
+    st.markdown("### 交易統計")
+    total=float(trades["損益"].sum()) if not trades.empty else 0
+    wr=float((trades["損益"]>0).mean()*100) if not trades.empty else 0
+    count=len(trades); avg=float(trades["R"].mean()) if count else 0
+    best=float(trades["損益"].max()) if count else 0; worst=float(trades["損益"].min()) if count else 0
+    st.markdown(f'<div class="cardgrid"><div class="card"><div class="k">總損益</div><div class="v">{total:+,.0f}</div></div><div class="card"><div class="k">勝率</div><div class="v">{wr:.0f}%</div></div><div class="card"><div class="k">交易次數</div><div class="v">{count}</div></div><div class="card"><div class="k">平均 R</div><div class="v">{avg:.2f}</div></div><div class="card"><div class="k">最大獲利</div><div class="v">{best:+,.0f}</div></div><div class="card"><div class="k">最大虧損</div><div class="v">{worst:+,.0f}</div></div></div>',unsafe_allow_html=True)
 with right:
   chart_col, trade_col = st.columns([7.3,2.7],gap="small")
   with chart_col:
