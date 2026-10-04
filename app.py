@@ -5,7 +5,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 from replay_engine import interpolate_bar
-from trading_engine import open_position, close_position, log_order
+from trading_engine import open_position, close_position
 
 st.set_page_config(page_title="蔥明錢 Lite", page_icon="🧅", layout="wide", initial_sidebar_state="collapsed")
 st.markdown("""
@@ -40,6 +40,19 @@ def resume_after_trade_action():
     """Resume the 8-second Dynamic Replay only after the trade action has completed."""
     st.session_state.running = st.session_state.mode == "Dynamic Replay"
     st.session_state.last_tick = time.time()
+
+def log_order(state, action, reasons=None):
+    """Record a submitted trading-panel action in the replay operation log."""
+    row = state.current_bar
+    state.order_events.append({
+        "日期": str(row["Date"].date()), "Replay 時點": int(state.i),
+        "股票": "2330 台積電", "操作": action,
+        "價格": round(float(row["Close"]), 2), "數量": int(state.qty),
+        "部位": "多" if state.pos == 1 else ("空" if state.pos == -1 else "空手"),
+        "SL %": float(getattr(state, "sl_pct", 0) or 0),
+        "TP %": float(getattr(state, "tp_pct", 0) or 0),
+        "交易理由": "、".join(reasons or []), "交易模式": "Manual",
+    })
 
 st.session_state.current_bar=current_bar()
 trades=pd.DataFrame(st.session_state.trades)
@@ -99,11 +112,13 @@ with right:
     st.session_state.sl_pct=st.number_input("SL %",min_value=0.,step=.1,key="sl_input")
     st.session_state.tp_pct=st.number_input("TP %",min_value=0.,step=.1,key="tp_input")
     if st.button("⬆ BUY 做多",use_container_width=True):
-      st.session_state.running=False; open_position(st.session_state,1,reasons); st.session_state.running=(st.session_state.mode=="Dynamic Replay"); st.session_state.last_tick=time.time(); st.rerun()
+      st.session_state.running=False; open_position(st.session_state,1,reasons); log_order(st.session_state,"BUY 做多",reasons); resume_after_trade_action(); st.rerun()
     if st.button("⬇ SELL 做空",use_container_width=True):
-      st.session_state.running=False; open_position(st.session_state,-1,reasons); st.session_state.running=(st.session_state.mode=="Dynamic Replay"); st.session_state.last_tick=time.time(); st.rerun()
+      st.session_state.running=False; open_position(st.session_state,-1,reasons); log_order(st.session_state,"SELL 做空",reasons); resume_after_trade_action(); st.rerun()
     if st.button("✕ 平倉",use_container_width=True):
-      st.session_state.running=False; close_position(st.session_state,"Manual",reasons); st.session_state.running=(st.session_state.mode=="Dynamic Replay"); st.session_state.last_tick=time.time(); st.rerun()
+      st.session_state.running=False
+      if st.session_state.pos: log_order(st.session_state,"平倉",reasons)
+      close_position(st.session_state,"Manual",reasons); resume_after_trade_action(); st.rerun()
     a,b=st.columns(2)
     if a.button("＋ 加碼",use_container_width=True):
       st.session_state.running=False
