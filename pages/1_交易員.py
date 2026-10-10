@@ -7,7 +7,24 @@ from datetime import date, timedelta
 
 from replay_engine import interpolate_bar
 from trading_engine import open_position, close_position
-from market_data import fetch_twse_daily, fetch_tpex_daily, listed_instruments, otc_instruments
+import market_data
+
+fetch_twse_daily = market_data.fetch_twse_daily
+listed_instruments = market_data.listed_instruments
+
+
+def fetch_tpex_daily(*args, **kwargs):
+    loader = getattr(market_data, "fetch_tpex_daily", None)
+    if loader is None:
+        raise RuntimeError("部署中的行情模組尚未更新，請稍候重新載入後再試。")
+    return loader(*args, **kwargs)
+
+
+def otc_instruments():
+    loader = getattr(market_data, "otc_instruments", None)
+    if loader is None:
+        raise RuntimeError("部署中的行情模組尚未更新，請稍候重新載入後再試。")
+    return loader()
 
 st.set_page_config(page_title="蔥明錢 Lite", page_icon="🧅", layout="wide", initial_sidebar_state="collapsed")
 st.markdown("""
