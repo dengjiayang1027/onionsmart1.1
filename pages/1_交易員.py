@@ -7,7 +7,7 @@ from datetime import date, timedelta
 
 from replay_engine import interpolate_bar
 from trading_engine import open_position, close_position
-from market_data import fetch_twse_daily, listed_instruments
+from market_data import fetch_twse_daily, fetch_tpex_daily, listed_instruments, otc_instruments
 
 st.set_page_config(page_title="蔥明錢 Lite", page_icon="🧅", layout="wide", initial_sidebar_state="collapsed")
 st.markdown("""
@@ -32,27 +32,37 @@ for k,v in defaults.items():
 
 if "listed_instruments" not in st.session_state:
     st.session_state.listed_instruments = [{"code": "2330", "name": "台積電"}]
+if "otc_instruments" not in st.session_state:
+    st.session_state.otc_instruments = [{"code": "3297", "name": "杭特"}]
 if "market_bars" not in st.session_state:
     st.session_state.market_bars = make_data()
     st.session_state.market_symbol = "2330"
     st.session_state.market_name = "台積電"
     st.session_state.market_source = "示範行情（模擬資料）"
 
-with st.expander("📈 行情設定｜台灣上市・日線", expanded=False):
+with st.expander("📈 行情設定｜台灣上市／上櫃・日線", expanded=False):
     choose_col, date_col, action_col = st.columns([2.2, 2.4, 1.2])
     with choose_col:
-        if st.button("↻ 更新上市標的清單", help="搜尋清單取自證交所最新每日成交資料"):
+        market = st.radio("市場", ["上市", "上櫃"], horizontal=True, key="market_venue")
+        instruments_key = "listed_instruments" if market == "上市" else "otc_instruments"
+        fetch_list = listed_instruments if market == "上市" else otc_instruments
+        market_label = "上市" if market == "上市" else "上櫃"
+        if st.button(f"↻ 更新{market_label}標的清單", help="搜尋清單取自交易所最新每日行情"):
             try:
-                with st.spinner("讀取證交所上市標的…"):
-                    st.session_state.listed_instruments = listed_instruments()
-                st.success(f"標的清單已更新，共 {len(st.session_state.listed_instruments)} 檔")
+                with st.spinner(f"讀取{market_label}標的…"):
+                    st.session_state[instruments_key] = fetch_list()
+                st.success(f"{market_label}標的清單已更新，共 {len(st.session_state[instruments_key])} 檔")
             except Exception as exc:
                 st.error(str(exc))
-        options = st.session_state.listed_instruments
+        options = st.session_state[instruments_key]
         labels = {f"{item['code']}｜{item['name']}": item for item in options}
-        current = next((label for label, item in labels.items() if item["code"] == st.session_state.market_symbol), next(iter(labels)))
-        selected = st.selectbox("搜尋代碼或名稱", list(labels), index=list(labels).index(current))
-        manual_code = st.text_input("選單找不到時，直接輸入上市代碼", max_chars=6, placeholder="例如 2486")
+        if not labels:
+            st.error("目前標的清單是空的，請更新清單或直接輸入代碼。")
+            selected = None
+        else:
+            current = next((label for label, item in labels.items() if item["code"] == st.session_state.market_symbol), next(iter(labels)))
+            selected = st.selectbox("搜尋代碼或名稱", list(labels), index=list(labels).index(current), key=f"instrument_{market}")
+        manual_code = st.text_input(f"選單找不到時，直接輸入{market_label}代碼", max_chars=6, placeholder="例如 3297")
     with date_col:
         today = date.today()
         default_start = today - timedelta(days=183)
@@ -65,20 +75,23 @@ with st.expander("📈 行情設定｜台灣上市・日線", expanded=False):
         if len(date_range) != 2:
             st.warning("請選擇完整的開始與結束日期。")
         else:
-            instrument = labels[selected]
+            instrument = labels[selected] if selected else None
             if manual_code.strip():
                 code = manual_code.strip()
                 if not code.isdigit():
                     st.error("請輸入純數字股票代碼。")
                     st.stop()
                 instrument = {"code": code, "name": next((item["name"] for item in options if item["code"] == code), code)}
+            if instrument is None:
+                st.stop()
             try:
                 with st.spinner(f"載入 {instrument['code']} 歷史日線…"):
-                    loaded = fetch_twse_daily(instrument["code"], date_range[0], date_range[1])
+                    loader = fetch_twse_daily if market == "上市" else fetch_tpex_daily
+                    loaded = loader(instrument["code"], date_range[0], date_range[1])
                 st.session_state.market_bars = loaded
                 st.session_state.market_symbol = instrument["code"]
                 st.session_state.market_name = instrument["name"]
-                st.session_state.market_source = "臺灣證券交易所｜歷史日成交資訊"
+                st.session_state.market_source = "臺灣證券交易所｜歷史日成交資訊" if market == "上市" else "證券櫃檯買賣中心｜個股日成交資訊"
                 st.session_state.i = min(90, len(loaded) - 1)
                 st.session_state.pos = 0
                 st.session_state.entry = None
