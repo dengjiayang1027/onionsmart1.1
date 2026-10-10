@@ -52,6 +52,7 @@ with st.expander("📈 行情設定｜台灣上市・日線", expanded=False):
         labels = {f"{item['code']}｜{item['name']}": item for item in options}
         current = next((label for label, item in labels.items() if item["code"] == st.session_state.market_symbol), next(iter(labels)))
         selected = st.selectbox("搜尋代碼或名稱", list(labels), index=list(labels).index(current))
+        manual_code = st.text_input("選單找不到時，直接輸入上市代碼", max_chars=6, placeholder="例如 2486")
     with date_col:
         today = date.today()
         default_start = today - timedelta(days=183)
@@ -65,6 +66,12 @@ with st.expander("📈 行情設定｜台灣上市・日線", expanded=False):
             st.warning("請選擇完整的開始與結束日期。")
         else:
             instrument = labels[selected]
+            if manual_code.strip():
+                code = manual_code.strip()
+                if not code.isdigit():
+                    st.error("請輸入純數字股票代碼。")
+                    st.stop()
+                instrument = {"code": code, "name": next((item["name"] for item in options if item["code"] == code), code)}
             try:
                 with st.spinner(f"載入 {instrument['code']} 歷史日線…"):
                     loaded = fetch_twse_daily(instrument["code"], date_range[0], date_range[1])
