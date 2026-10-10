@@ -17,7 +17,7 @@ html,body,[data-testid="stAppViewContainer"]{background:#08111a;color:#eef5f9}
 div[data-testid="stVerticalBlockBorderWrapper"]>div{background:#0d1822;border:1px solid #223442;border-radius:12px}
 .stButton button{min-height:42px;border-radius:9px;font-weight:800;background:#10202c;color:#f2f7fb}
 .brand{font-size:28px;font-weight:900;padding:2px 4px 8px}.sub{color:#73889a;font-size:13px;margin-left:8px}
-.cardgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}.card{background:#111f2a;border:1px solid #223544;border-radius:9px;padding:8px 9px;min-height:56px}.card .k{font-size:12px;color:#8094a4}.card .v{font-size:18px;font-weight:850;margin-top:3px}
+.cardgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;padding-bottom:10px}.card{background:#111f2a;border:1px solid #223544;border-radius:9px;padding:8px 9px;min-height:56px}.card .k{font-size:12px;color:#8094a4}.card .v{font-size:18px;font-weight:850;margin-top:3px}
 </style>""", unsafe_allow_html=True)
 
 @st.cache_data(show_spinner=False)
