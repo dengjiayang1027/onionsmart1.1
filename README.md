@@ -25,3 +25,16 @@ streamlit run app.py
 - Plotly 圖表工具列提供趨勢線、矩形、圓形、自由畫筆、文字和刪除形狀。繪圖目前只在瀏覽器圖表互動期間存在；Undo/Redo、Lock、形狀跨 rerun/交易紀錄保存與還原尚待接入能回傳 Plotly relayout/edit 事件的元件。這是 Streamlit 原生 `plotly_chart` 事件支援的限制，尚未宣稱完成持久化。
 
 下一階段可把圖表事件包成獨立 component，將畫圖與交易時點快照保存至 session/database，再加入 Auto Trading 規則引擎並沿用 `trading_engine.py` 的紀錄介面。
+
+## Phase 2（第一個資料切片）
+
+- 交易員模式可使用證交所上市標的清單搜尋，載入所選區間的台股日線 OHLCV，並沿用既有手動／動態 Replay、下單及交易記錄。
+- 行情下載使用證交所歷史月查詢；標的清單及各月行情由 Streamlit 快取，避免重複請求。
+- 首次進頁仍使用明確標示的示範行情；外部行情載入失敗時不會把示範資料誤稱為歷史行情。
+- 證交所的政府開放資料集頁列示政府資料開放授權條款第 1 版，但該資料集提供每日資料。歷史端點是證交所查詢服務；正式公開或商用前仍需確認該端點的具體授權與使用條件。行情僅供模擬訓練，請以證交所公告為準。
+
+官方來源：
+
+- [臺灣證券交易所歷史個股日成交資訊](https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY)
+- [上市個股日成交資訊開放資料集](https://data.gov.tw/dataset/11549)
+- [政府資料開放授權條款](https://data.gov.tw/license)
