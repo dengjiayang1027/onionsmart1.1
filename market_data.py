@@ -21,8 +21,13 @@ def _get_json(url: str) -> dict | list:
     request = Request(url, headers={"User-Agent": "OnionSmartReplay/1.0", "Accept": "application/json"})
     try:
         with urlopen(request, timeout=15) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
+            body = response.read().decode("utf-8-sig")
+        try:
+            return json.loads(body)
+        except json.JSONDecodeError as exc:
+            preview = " ".join(body[:160].split())
+            raise RuntimeError(f"行情服務回傳非 JSON：{preview or '空回應'}") from exc
+    except (HTTPError, URLError, TimeoutError) as exc:
         raise RuntimeError(f"無法讀取交易所行情資料：{exc}") from exc
 
 
@@ -127,7 +132,7 @@ def _tpex_monthly_bars(symbol: str, month: str) -> list[list[str]]:
     """Fetch one TPEx main-board security's daily rows for a ROC calendar month."""
     year, month_num = int(month[:4]), int(month[4:])
     roc_month = f"{year - 1911}/{month_num:02d}"
-    params = urlencode({"d": roc_month, "stkno": symbol})
+    params = urlencode({"l": "zh-tw", "o": "json", "d": roc_month, "stkno": symbol})
     payload = _get_json(f"{TPEX_HISTORY}?{params}")
     if not isinstance(payload, dict):
         return []
