@@ -162,9 +162,11 @@ with left:
     st.session_state.mode=st.radio("Replay 模式",["Manual Replay","Dynamic Replay"],horizontal=True,index=0 if st.session_state.mode=="Manual Replay" else 1)
     if st.session_state.mode=="Dynamic Replay":
       st.caption("每根日 K 固定 8 秒；只有交易操作會暫停行情。")
-      a,b=st.columns(2)
-      if a.button("▶ 開始 / 繼續",use_container_width=True): st.session_state.running=True; st.session_state.last_tick=time.time(); st.rerun()
-      if b.button("⏸ 暫停",use_container_width=True): st.session_state.running=False; st.rerun()
+      play_label = "⏸ 暫停" if st.session_state.running else "▶ 開始 / 繼續"
+      if st.button(play_label,use_container_width=True):
+        st.session_state.running = not st.session_state.running
+        if st.session_state.running: st.session_state.last_tick=time.time()
+        st.rerun()
       if st.session_state.pause_until>time.time(): st.warning(f"市場暫停 {max(1,int(st.session_state.pause_until-time.time()+.99))} 秒｜{st.session_state.pause_reason}")
       elif st.session_state.running: st.caption(f"行情形成中　{st.session_state.progress*100:.0f}%")
     else:
