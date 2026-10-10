@@ -3,9 +3,30 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+from datetime import date, timedelta
+from pathlib import Path
 
 from replay_engine import interpolate_bar
 from trading_engine import open_position, close_position
+from scorecard import METRICS, compute_scorecard
+import market_data
+
+fetch_twse_daily = market_data.fetch_twse_daily
+listed_instruments = market_data.listed_instruments
+
+
+def fetch_tpex_daily(*args, **kwargs):
+    loader = getattr(market_data, "fetch_tpex_daily", None)
+    if loader is None:
+        raise RuntimeError("部署中的行情模組尚未更新，請稍候重新載入後再試。")
+    return loader(*args, **kwargs)
+
+
+def otc_instruments():
+    loader = getattr(market_data, "otc_instruments", None)
+    if loader is None:
+        raise RuntimeError("部署中的行情模組尚未更新，請稍候重新載入後再試。")
+    return loader()
 
 st.set_page_config(page_title="蔥明錢 Lite", page_icon="🧅", layout="wide", initial_sidebar_state="collapsed")
 st.markdown("""
@@ -15,7 +36,7 @@ html,body,[data-testid="stAppViewContainer"]{background:#08111a;color:#eef5f9}
 div[data-testid="stVerticalBlockBorderWrapper"]>div{background:#0d1822;border:1px solid #223442;border-radius:12px}
 .stButton button{min-height:42px;border-radius:9px;font-weight:800;background:#10202c;color:#f2f7fb}
 .brand{font-size:28px;font-weight:900;padding:2px 4px 8px}.sub{color:#73889a;font-size:13px;margin-left:8px}
-.cardgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px}.card{background:#111f2a;border:1px solid #223544;border-radius:9px;padding:8px 9px;min-height:56px}.card .k{font-size:12px;color:#8094a4}.card .v{font-size:18px;font-weight:850;margin-top:3px}
+.cardgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;padding-bottom:10px}.card{background:#111f2a;border:1px solid #223544;border-radius:9px;padding:8px 9px;min-height:56px}.card .k{font-size:12px;color:#8094a4}.card .v{font-size:18px;font-weight:850;margin-top:3px}
 </style>""", unsafe_allow_html=True)
 
 @st.cache_data(show_spinner=False)
@@ -23,11 +44,100 @@ def make_data(n=320, seed=12):
     rng=np.random.default_rng(seed); r=rng.normal(.0007,.012,n); close=450*np.cumprod(1+r); close=close/close[-1]*525
     op=np.r_[close[0],close[:-1]*(1+rng.normal(0,.0025,n-1))]
     hi=np.maximum(op,close)*(1+rng.uniform(.002,.011,n)); lo=np.minimum(op,close)*(1-rng.uniform(.002,.011,n))
-    return pd.DataFrame({"Date":pd.date_range("2023-01-02",periods=n,freq="B"),"Open":op,"High":hi,"Low":lo,"Close":close})
-df=make_data()
-defaults={"i":90,"pos":0,"entry":None,"entry_time":None,"entry_replay":None,"entry_qty":0,"entry_sl":0.,"entry_tp":0.,"trade_mode":"Manual","qty":1,"trades":[],"order_events":[],"mode":"Manual Replay","progress":0.,"running":False,"pause_until":0.,"pause_reason":"","last_tick":time.time(),"last_full_refresh":time.time(),"dynamic_seconds":8,"drawings":[],"hidden_drawings":False,"undo":[]}
+    return pd.DataFrame({"Date":pd.date_range("2023-01-02",periods=n,freq="B"),"Open":op,"High":hi,"Low":lo,"Close":close,"Volume":0})
+defaults={"i":90,"replay_start_index":90,"replay_completed":False,"pos":0,"entry":None,"entry_time":None,"entry_replay":None,"entry_qty":0,"entry_sl":0.,"entry_tp":0.,"trade_mode":"Manual","qty":1,"trades":[],"order_events":[],"mode":"Manual Replay","progress":0.,"running":False,"pause_until":0.,"pause_reason":"","last_tick":time.time(),"last_full_refresh":time.time(),"dynamic_seconds":8,"drawings":[],"hidden_drawings":False,"undo":[]}
 for k,v in defaults.items():
     if k not in st.session_state: st.session_state[k]=v
+
+if "listed_instruments" not in st.session_state:
+    st.session_state.listed_instruments = [{"code": "2330", "name": "台積電"}]
+if "otc_instruments" not in st.session_state:
+    st.session_state.otc_instruments = [{"code": "3297", "name": "杭特"}]
+if "market_bars" not in st.session_state:
+    st.session_state.market_bars = make_data()
+    st.session_state.market_symbol = "2330"
+    st.session_state.market_name = "台積電"
+    st.session_state.market_source = "示範行情（模擬資料）"
+    st.session_state.replay_start_index = 90
+
+with st.expander("📈 行情設定｜台灣上市／上櫃・日線", expanded=False):
+    choose_col, date_col, action_col = st.columns([2.2, 2.4, 1.2])
+    with choose_col:
+        market = st.radio("市場", ["上市", "上櫃"], horizontal=True, key="market_venue")
+        instruments_key = "listed_instruments" if market == "上市" else "otc_instruments"
+        fetch_list = listed_instruments if market == "上市" else otc_instruments
+        market_label = "上市" if market == "上市" else "上櫃"
+        if st.button(f"↻ 更新{market_label}標的清單", help="搜尋清單取自交易所最新每日行情"):
+            try:
+                with st.spinner(f"讀取{market_label}標的…"):
+                    st.session_state[instruments_key] = fetch_list()
+                st.success(f"{market_label}標的清單已更新，共 {len(st.session_state[instruments_key])} 檔")
+            except Exception as exc:
+                st.error(str(exc))
+        options = st.session_state[instruments_key]
+        labels = {f"{item['code']}｜{item['name']}": item for item in options}
+        if not labels:
+            st.error("目前標的清單是空的，請更新清單或直接輸入代碼。")
+            selected = None
+        else:
+            current = next((label for label, item in labels.items() if item["code"] == st.session_state.market_symbol), next(iter(labels)))
+            selected = st.selectbox("搜尋代碼或名稱", list(labels), index=list(labels).index(current), key=f"instrument_{market}")
+        manual_code = st.text_input(f"選單找不到時，直接輸入{market_label}代碼", max_chars=6, placeholder="例如 3297")
+    with date_col:
+        today = date.today()
+        default_start = today - timedelta(days=183)
+        date_range = st.date_input("歷史區間", value=(default_start, today), max_value=today)
+        st.caption("目前支援 1D；每次最多查詢 25 個月。")
+    with action_col:
+        st.caption("載入新行情會重設目前練習紀錄。")
+        load_market = st.button("載入日線", type="primary", use_container_width=True)
+    if load_market:
+        if len(date_range) != 2:
+            st.warning("請選擇完整的開始與結束日期。")
+        else:
+            instrument = labels[selected] if selected else None
+            if manual_code.strip():
+                code = manual_code.strip()
+                if not code.isdigit():
+                    st.error("請輸入純數字股票代碼。")
+                    st.stop()
+                instrument = {"code": code, "name": next((item["name"] for item in options if item["code"] == code), code)}
+            if instrument is None:
+                st.stop()
+            try:
+                with st.spinner(f"載入 {instrument['code']} 歷史日線…"):
+                    loader = fetch_twse_daily if market == "上市" else fetch_tpex_daily
+                    loaded = loader(instrument["code"], date_range[0], date_range[1])
+                if loaded.empty:
+                    st.warning("所選日期區間沒有可用日線，請調整日期後再載入。")
+                    st.stop()
+                st.session_state.market_bars = loaded
+                st.session_state.market_symbol = instrument["code"]
+                st.session_state.market_name = instrument["name"]
+                st.session_state.market_source = "臺灣證券交易所｜歷史日成交資訊" if market == "上市" else "證券櫃檯買賣中心｜個股日成交資訊"
+                # The selected interval is the full training session, so start at its first bar.
+                st.session_state.replay_start_index = 0
+                st.session_state.i = st.session_state.replay_start_index
+                st.session_state.pos = 0
+                st.session_state.entry = None
+                st.session_state.entry_qty = 0
+                st.session_state.progress = 0.0
+                st.session_state.running = False
+                st.session_state.replay_completed = False
+                st.session_state.trades = []
+                st.session_state.order_events = []
+                st.session_state.drawings = []
+                st.session_state.undo = []
+                st.success(f"載入完成：{instrument['code']} {instrument['name']}，{len(loaded)} 根日 K")
+            except Exception as exc:
+                st.error(f"行情載入失敗：{exc}；目前仍可使用示範行情。")
+
+df = st.session_state.market_bars
+if df.empty:
+    st.error("目前沒有可播放的行情資料，請重新載入有資料的歷史區間。")
+    st.stop()
+st.caption(f"行情：{st.session_state.market_source}｜{st.session_state.market_symbol} {st.session_state.market_name}｜{len(df)} 根日 K")
+st.session_state.i = min(max(0, int(st.session_state.i)), len(df) - 1)
 
 def current_bar():
     base=df.iloc[st.session_state.i].copy()
@@ -46,7 +156,7 @@ def log_order(state, action, reasons=None):
     row = state.current_bar
     state.order_events.append({
         "日期": str(row["Date"].date()), "Replay 時點": int(state.i),
-        "股票": "2330 台積電", "操作": action,
+        "股票": f"{st.session_state.market_symbol} {st.session_state.market_name}", "操作": action,
         "價格": round(float(row["Close"]), 2), "數量": int(state.qty),
         "部位": "多" if state.pos == 1 else ("空" if state.pos == -1 else "空手"),
         "SL %": float(getattr(state, "sl_pct", 0) or 0),
@@ -55,6 +165,12 @@ def log_order(state, action, reasons=None):
     })
 
 st.session_state.current_bar=current_bar()
+if not st.session_state.replay_completed and len(df) and st.session_state.i >= len(df) - 1:
+    st.session_state.running = False
+    if st.session_state.pos:
+        close_position(st.session_state, "區間結束", [])
+    st.session_state.replay_completed = True
+    st.rerun()
 trades=pd.DataFrame(st.session_state.trades)
 
 st.markdown('<div class="brand">🧅 蔥明錢 <span class="sub">交易訓練模式</span></div>',unsafe_allow_html=True)
@@ -64,9 +180,11 @@ with left:
     st.session_state.mode=st.radio("Replay 模式",["Manual Replay","Dynamic Replay"],horizontal=True,index=0 if st.session_state.mode=="Manual Replay" else 1)
     if st.session_state.mode=="Dynamic Replay":
       st.caption("每根日 K 固定 8 秒；只有交易操作會暫停行情。")
-      a,b=st.columns(2)
-      if a.button("▶ 開始 / 繼續",use_container_width=True): st.session_state.running=True; st.session_state.last_tick=time.time(); st.rerun()
-      if b.button("⏸ 暫停",use_container_width=True): st.session_state.running=False; st.rerun()
+      play_label = "⏸ 暫停" if st.session_state.running else "▶ 開始 / 繼續"
+      if st.button(play_label,use_container_width=True):
+        st.session_state.running = not st.session_state.running
+        if st.session_state.running: st.session_state.last_tick=time.time()
+        st.rerun()
       if st.session_state.pause_until>time.time(): st.warning(f"市場暫停 {max(1,int(st.session_state.pause_until-time.time()+.99))} 秒｜{st.session_state.pause_reason}")
       elif st.session_state.running: st.caption(f"行情形成中　{st.session_state.progress*100:.0f}%")
     else:
@@ -85,7 +203,7 @@ with right:
   with chart_col:
    with st.container(border=True):
     row=st.session_state.current_bar
-    h1,h2,h3=st.columns([2.1,1.2,4.7]); h1.markdown("### 2330 台積電"); h2.markdown(f"**{row.Date.date()}**")
+    h1,h2,h3=st.columns([2.1,1.2,4.7]); h1.markdown(f"### {st.session_state.market_symbol} {st.session_state.market_name}"); h2.markdown(f"**{row.Date.date()}**")
     h3.markdown(f"開 {row.Open:.1f}　高 {row.High:.1f}　低 {row.Low:.1f}　現價 **{row.Close:.1f}**")
     start=max(0,st.session_state.i-119); vis=df.iloc[start:st.session_state.i+1].copy()
     if st.session_state.mode=="Dynamic Replay":
@@ -103,7 +221,7 @@ with right:
     if p.button("↶ Undo",use_container_width=True) and st.session_state.drawings: st.session_state.undo.append(st.session_state.drawings.pop()); st.rerun()
     if q.button("顯示 / 隱藏圖形",use_container_width=True): st.session_state.hidden_drawings=not st.session_state.hidden_drawings; st.rerun()
     if r.button("刪除圖形",use_container_width=True): st.session_state.drawings=[]; st.rerun()
-    st.caption("圖表可用左上工具列畫線、矩形、自由畫筆與文字。OHLC-only 動態路徑為合成示意，並非真實盤中歷史。")
+    st.caption("圖表可用左上工具列畫線、矩形、自由畫筆與文字。動態日 K 僅為 OHLC 推演，並非真實盤中歷史。行情來源：臺灣證券交易所；示範行情為模擬資料。")
   with trade_col:
    with st.container(border=True):
     st.markdown("### 交易操作")
@@ -140,6 +258,88 @@ with st.container(border=True):
   order_events=pd.DataFrame(st.session_state.order_events)
   if order_events.empty: st.caption("尚無交易操作。BUY、SELL、加減碼與平倉都會記錄於此。")
   else: st.dataframe(order_events.iloc[::-1],use_container_width=True,hide_index=True,height=205)
+
+if st.session_state.replay_completed:
+  result = compute_scorecard(
+      pd.DataFrame(st.session_state.trades), df,
+      st.session_state.replay_start_index, st.session_state.i,
+  )
+  st.markdown("## 📊 本次練習成績單")
+  st.caption(f"{df.iloc[st.session_state.replay_start_index].Date.date()} ～ {df.iloc[st.session_state.i].Date.date()}｜六項能力皆為 1–5 分，越高代表表現越好。")
+  summary_a, summary_b, summary_c = st.columns(3)
+  summary_a.metric("本次總損益", f"{result['total_profit']:+,.0f}")
+  summary_b.metric("勝率", f"{result['win_rate']:.0%}")
+  summary_c.metric("完成交易", f"{result['trade_count']} 筆")
+
+  score_col, persona_col = st.columns([1.25, .75], gap="large")
+  with score_col:
+    radar_values = [result["scores"][metric] for metric in METRICS]
+    radar = go.Figure(go.Scatterpolar(
+        r=radar_values + [radar_values[0]],
+        theta=list(METRICS) + [METRICS[0]],
+        fill="toself",
+        fillcolor="rgba(77, 163, 230, .24)",
+        line=dict(color="#4da3e6", width=3),
+        marker=dict(size=9, color="#4da3e6", line=dict(color="#dceeff", width=1.5)),
+        hovertemplate="%{theta}：%{r:.1f}/5<extra></extra>",
+    ))
+    radar.update_layout(
+        height=430, margin=dict(l=42, r=42, t=44, b=36),
+        paper_bgcolor="#08111a", plot_bgcolor="#08111a",
+        font=dict(color="#f2f7fb", size=15), showlegend=False,
+        polar=dict(
+            bgcolor="#08111a",
+            angularaxis=dict(direction="clockwise", rotation=90, gridcolor="#465360", linecolor="#465360"),
+            radialaxis=dict(visible=True, range=[0, 5], tickmode="array", tickvals=[1, 2, 3, 4, 5],
+                            tickfont=dict(size=10, color="#93a4b1"), gridcolor="#3a4652", linecolor="#3a4652"),
+        ),
+    )
+    st.plotly_chart(radar, use_container_width=True, config={"displayModeBar": False})
+    st.markdown("### 六項能力")
+    left_metrics, right_metrics = st.columns(2, gap="medium")
+    for index, metric in enumerate(METRICS):
+      target = left_metrics if index % 2 == 0 else right_metrics
+      score = result["scores"][metric]
+      with target:
+        st.markdown(f"**{metric}　{score:.1f} / 5**　·　{result['samples'][metric]} 筆樣本")
+        st.progress(max(0.0, min(1.0, (score - 1.0) / 4.0)))
+        st.caption(result["notes"][metric])
+  with persona_col:
+    st.markdown("### 🧙 本次交易人格")
+    if result["role"]:
+      st.subheader(result["role"])
+      role_image = Path(__file__).resolve().parent.parent / "assets" / "occupations" / "reference-art" / result["role_image"]
+      if role_image.exists():
+        st.image(str(role_image), use_container_width=True)
+      st.markdown(f"**優勢組合：** {'＋'.join(result['top_pair'])}")
+      st.write(result["role_description"])
+    else:
+      st.info("完成至少兩項有效能力樣本後，系統會依最高的兩項能力顯示職業人格。")
+    st.caption("職業由六項能力中分數最高的兩項決定；同分時依 守、效、買、賣、盈、穩 順序判定。")
+  with st.expander("查看評分說明"):
+    st.markdown("""
+    - **守**：最大資產回撤越小，分數越高。
+    - **效**：獲利因子（總獲利 ÷ 總虧損）越高，分數越高。
+    - **買**：進場後下一根完整 K 棒走勢越有利，分數越高。
+    - **賣**：平倉後行情越少沿原持倉方向延續，分數越高。
+    - **盈**：實際落袋的獲利越接近持倉期間最大浮盈，分數越高。
+    - **穩**：交易 R 值波動越小且平均為正，分數越高。
+
+    買、賣、盈、穩少於 3 筆有效樣本時，以中間分 3/5 顯示並註明樣本不足。總損益另列，不納入六邊形。
+    """)
+  if st.button("↻ 重新練習此日期區間", type="primary"):
+    st.session_state.i = st.session_state.replay_start_index
+    st.session_state.pos = 0
+    st.session_state.entry = None
+    st.session_state.entry_time = None
+    st.session_state.entry_replay = None
+    st.session_state.entry_qty = 0
+    st.session_state.progress = 0.0
+    st.session_state.running = False
+    st.session_state.replay_completed = False
+    st.session_state.trades = []
+    st.session_state.order_events = []
+    st.rerun()
 
 # Dynamic loop: a Streamlit fragment reruns frequently while its own clock advances the synthetic session.
 if st.session_state.mode=="Dynamic Replay":

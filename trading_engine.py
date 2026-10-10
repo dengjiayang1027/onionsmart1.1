@@ -41,6 +41,7 @@ def close_position(state, exit_type="Manual", reasons=None):
     state.trades.append({
         "#": len(state.trades) + 1, "日期": str(state.entry_time.date()),
         "Replay 時點": int(state.entry_replay), "股票": "2330 台積電",
+        "出場日期": str(row["Date"].date()), "出場Replay時點": int(state.i),
         "方向": "BUY" if state.pos == 1 else "SELL", "進場": round(state.entry, 2),
         "出場": round(px, 2), "數量": qty, "部位": "多" if state.pos == 1 else "空",
         "SL %": state.entry_sl, "TP %": state.entry_tp,
