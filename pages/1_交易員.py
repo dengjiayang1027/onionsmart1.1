@@ -3,9 +3,11 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+from datetime import date, timedelta
 
 from replay_engine import interpolate_bar
 from trading_engine import open_position, close_position
+from market_data import fetch_twse_daily, listed_instruments
 
 st.set_page_config(page_title="蔥明錢 Lite", page_icon="🧅", layout="wide", initial_sidebar_state="collapsed")
 st.markdown("""
@@ -23,11 +25,70 @@ def make_data(n=320, seed=12):
     rng=np.random.default_rng(seed); r=rng.normal(.0007,.012,n); close=450*np.cumprod(1+r); close=close/close[-1]*525
     op=np.r_[close[0],close[:-1]*(1+rng.normal(0,.0025,n-1))]
     hi=np.maximum(op,close)*(1+rng.uniform(.002,.011,n)); lo=np.minimum(op,close)*(1-rng.uniform(.002,.011,n))
-    return pd.DataFrame({"Date":pd.date_range("2023-01-02",periods=n,freq="B"),"Open":op,"High":hi,"Low":lo,"Close":close})
-df=make_data()
+    return pd.DataFrame({"Date":pd.date_range("2023-01-02",periods=n,freq="B"),"Open":op,"High":hi,"Low":lo,"Close":close,"Volume":0})
 defaults={"i":90,"pos":0,"entry":None,"entry_time":None,"entry_replay":None,"entry_qty":0,"entry_sl":0.,"entry_tp":0.,"trade_mode":"Manual","qty":1,"trades":[],"order_events":[],"mode":"Manual Replay","progress":0.,"running":False,"pause_until":0.,"pause_reason":"","last_tick":time.time(),"last_full_refresh":time.time(),"dynamic_seconds":8,"drawings":[],"hidden_drawings":False,"undo":[]}
 for k,v in defaults.items():
     if k not in st.session_state: st.session_state[k]=v
+
+if "listed_instruments" not in st.session_state:
+    st.session_state.listed_instruments = [{"code": "2330", "name": "台積電"}]
+if "market_bars" not in st.session_state:
+    st.session_state.market_bars = make_data()
+    st.session_state.market_symbol = "2330"
+    st.session_state.market_name = "台積電"
+    st.session_state.market_source = "示範行情（模擬資料）"
+
+with st.expander("📈 行情設定｜台灣上市・日線", expanded=False):
+    choose_col, date_col, action_col = st.columns([2.2, 2.4, 1.2])
+    with choose_col:
+        if st.button("↻ 更新上市標的清單", help="搜尋清單取自證交所最新每日成交資料"):
+            try:
+                with st.spinner("讀取證交所上市標的…"):
+                    st.session_state.listed_instruments = listed_instruments()
+                st.success(f"標的清單已更新，共 {len(st.session_state.listed_instruments)} 檔")
+            except Exception as exc:
+                st.error(str(exc))
+        options = st.session_state.listed_instruments
+        labels = {f"{item['code']}｜{item['name']}": item for item in options}
+        current = next((label for label, item in labels.items() if item["code"] == st.session_state.market_symbol), next(iter(labels)))
+        selected = st.selectbox("搜尋代碼或名稱", list(labels), index=list(labels).index(current))
+    with date_col:
+        today = date.today()
+        default_start = today - timedelta(days=183)
+        date_range = st.date_input("歷史區間", value=(default_start, today), max_value=today)
+        st.caption("目前支援 1D；每次最多查詢 25 個月。")
+    with action_col:
+        st.caption("載入新行情會重設目前練習紀錄。")
+        load_market = st.button("載入日線", type="primary", use_container_width=True)
+    if load_market:
+        if len(date_range) != 2:
+            st.warning("請選擇完整的開始與結束日期。")
+        else:
+            instrument = labels[selected]
+            try:
+                with st.spinner(f"載入 {instrument['code']} 歷史日線…"):
+                    loaded = fetch_twse_daily(instrument["code"], date_range[0], date_range[1])
+                st.session_state.market_bars = loaded
+                st.session_state.market_symbol = instrument["code"]
+                st.session_state.market_name = instrument["name"]
+                st.session_state.market_source = "臺灣證券交易所｜歷史日成交資訊"
+                st.session_state.i = min(90, len(loaded) - 1)
+                st.session_state.pos = 0
+                st.session_state.entry = None
+                st.session_state.entry_qty = 0
+                st.session_state.progress = 0.0
+                st.session_state.running = False
+                st.session_state.trades = []
+                st.session_state.order_events = []
+                st.session_state.drawings = []
+                st.session_state.undo = []
+                st.success(f"載入完成：{instrument['code']} {instrument['name']}，{len(loaded)} 根日 K")
+            except Exception as exc:
+                st.error(f"行情載入失敗：{exc}；目前仍可使用示範行情。")
+
+df = st.session_state.market_bars
+st.caption(f"行情：{st.session_state.market_source}｜{st.session_state.market_symbol} {st.session_state.market_name}｜{len(df)} 根日 K")
+st.session_state.i = min(max(0, int(st.session_state.i)), len(df) - 1)
 
 def current_bar():
     base=df.iloc[st.session_state.i].copy()
@@ -46,7 +107,7 @@ def log_order(state, action, reasons=None):
     row = state.current_bar
     state.order_events.append({
         "日期": str(row["Date"].date()), "Replay 時點": int(state.i),
-        "股票": "2330 台積電", "操作": action,
+        "股票": f"{st.session_state.market_symbol} {st.session_state.market_name}", "操作": action,
         "價格": round(float(row["Close"]), 2), "數量": int(state.qty),
         "部位": "多" if state.pos == 1 else ("空" if state.pos == -1 else "空手"),
         "SL %": float(getattr(state, "sl_pct", 0) or 0),
@@ -85,7 +146,7 @@ with right:
   with chart_col:
    with st.container(border=True):
     row=st.session_state.current_bar
-    h1,h2,h3=st.columns([2.1,1.2,4.7]); h1.markdown("### 2330 台積電"); h2.markdown(f"**{row.Date.date()}**")
+    h1,h2,h3=st.columns([2.1,1.2,4.7]); h1.markdown(f"### {st.session_state.market_symbol} {st.session_state.market_name}"); h2.markdown(f"**{row.Date.date()}**")
     h3.markdown(f"開 {row.Open:.1f}　高 {row.High:.1f}　低 {row.Low:.1f}　現價 **{row.Close:.1f}**")
     start=max(0,st.session_state.i-119); vis=df.iloc[start:st.session_state.i+1].copy()
     if st.session_state.mode=="Dynamic Replay":
@@ -103,7 +164,7 @@ with right:
     if p.button("↶ Undo",use_container_width=True) and st.session_state.drawings: st.session_state.undo.append(st.session_state.drawings.pop()); st.rerun()
     if q.button("顯示 / 隱藏圖形",use_container_width=True): st.session_state.hidden_drawings=not st.session_state.hidden_drawings; st.rerun()
     if r.button("刪除圖形",use_container_width=True): st.session_state.drawings=[]; st.rerun()
-    st.caption("圖表可用左上工具列畫線、矩形、自由畫筆與文字。OHLC-only 動態路徑為合成示意，並非真實盤中歷史。")
+    st.caption("圖表可用左上工具列畫線、矩形、自由畫筆與文字。動態日 K 僅為 OHLC 推演，並非真實盤中歷史。行情來源：臺灣證券交易所；示範行情為模擬資料。")
   with trade_col:
    with st.container(border=True):
     st.markdown("### 交易操作")
