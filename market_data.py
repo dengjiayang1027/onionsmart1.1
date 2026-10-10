@@ -14,7 +14,7 @@ import streamlit as st
 TWSE_BASE = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY"
 TWSE_LIST = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
 TPEX_LIST = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"
-TPEX_HISTORY = "https://www.tpex.org.tw/web/stock/aftertrading/daily_trading_info/st43_result.php"
+TPEX_HISTORY = "https://www.tpex.org.tw/www/zh-tw/afterTrading/tradingStock"
 
 
 def _get_json(url: str) -> dict | list:
@@ -131,12 +131,19 @@ def fetch_twse_daily(symbol: str, start: date, end: date) -> pd.DataFrame:
 def _tpex_monthly_bars(symbol: str, month: str) -> list[list[str]]:
     """Fetch one TPEx main-board security's daily rows for a ROC calendar month."""
     year, month_num = int(month[:4]), int(month[4:])
-    roc_month = f"{year - 1911}/{month_num:02d}"
-    params = urlencode({"l": "zh-tw", "o": "json", "d": roc_month, "stkno": symbol})
+    month_start = f"{year}/{month_num:02d}/01"
+    params = urlencode({"code": symbol, "date": month_start, "id": "", "response": "json"})
     payload = _get_json(f"{TPEX_HISTORY}?{params}")
     if not isinstance(payload, dict):
         return []
-    return payload.get("aaData", payload.get("data", [])) or []
+    # The current TPEx page wraps monthly rows in tables[0].data.
+    # Keep the older top-level shapes as fallbacks for compatibility.
+    tables = payload.get("tables")
+    if isinstance(tables, list) and tables and isinstance(tables[0], dict):
+        rows = tables[0].get("data", [])
+    else:
+        rows = payload.get("aaData", payload.get("data", payload.get("rows", [])))
+    return rows or []
 
 
 def fetch_tpex_daily(symbol: str, start: date, end: date) -> pd.DataFrame:
@@ -155,18 +162,36 @@ def fetch_tpex_daily(symbol: str, start: date, end: date) -> pd.DataFrame:
 
     parsed = []
     for row in rows:
-        if len(row) < 8:
-            continue
         try:
-            # TPEx S43 fields: date, shares, amount, open, high, low, close, change, count.
-            y, m, d = (int(part) for part in str(row[0]).split("/"))
+            if isinstance(row, dict):
+                date_value = row.get("Date", row.get("date", row.get("日期", "")))
+                volume = row.get("TradingShares", row.get("volume", row.get("成交股數", "")))
+                open_value = row.get("Open", row.get("open", row.get("開盤價", "")))
+                high_value = row.get("High", row.get("high", row.get("最高價", "")))
+                low_value = row.get("Low", row.get("low", row.get("最低價", "")))
+                close_value = row.get("Close", row.get("close", row.get("收盤價", "")))
+            else:
+                # TPEx monthly rows: date, shares, amount, open, high, low, close, change, count.
+                if len(row) < 7:
+                    continue
+                date_value, volume = row[0], row[1]
+                open_value, high_value, low_value, close_value = row[3:7]
+            date_text = str(date_value).strip().replace("-", "/")
+            date_parts = date_text.split("/")
+            if len(date_parts) != 3:
+                continue
+            y, m, d = (int(part) for part in date_parts)
+            # The legacy monthly table returns ROC dates; the current TPEx API may use AD.
+            if y < 1911:
+                y += 1911
             parsed.append({
-                "Date": date(y + 1911, m, d),
-                "Volume": _number(row[1]),
-                "Open": _number(row[3]),
-                "High": _number(row[4]),
-                "Low": _number(row[5]),
-                "Close": _number(row[6]),
+                "Date": date(y, m, d),
+                # TPEx's individual-month table reports trading shares in thousands.
+                "Volume": _number(volume) * 1000,
+                "Open": _number(open_value),
+                "High": _number(high_value),
+                "Low": _number(low_value),
+                "Close": _number(close_value),
             })
         except (ValueError, TypeError):
             continue
