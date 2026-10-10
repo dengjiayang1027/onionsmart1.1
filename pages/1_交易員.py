@@ -109,15 +109,16 @@ with st.expander("📈 行情設定｜台灣上市／上櫃・日線", expanded=
                     loader = fetch_twse_daily if market == "上市" else fetch_tpex_daily
                     loaded = loader(instrument["code"], date_range[0], date_range[1])
                 if loaded.empty:
-                    st.warning("所選日期區間沒有可用日線，請調整日期後再載入。")
+                    st.warning("所選區間沒有可播放的行情資料，請調整標的或日期。")
                     st.stop()
+
                 st.session_state.market_bars = loaded
                 st.session_state.market_symbol = instrument["code"]
                 st.session_state.market_name = instrument["name"]
                 st.session_state.market_source = "臺灣證券交易所｜歷史日成交資訊" if market == "上市" else "證券櫃檯買賣中心｜個股日成交資訊"
-                # The selected interval is the full training session, so start at its first bar.
                 st.session_state.replay_start_index = 0
-                st.session_state.i = st.session_state.replay_start_index
+
+                st.session_state.i = 0
                 st.session_state.pos = 0
                 st.session_state.entry = None
                 st.session_state.entry_qty = 0
@@ -133,9 +134,6 @@ with st.expander("📈 行情設定｜台灣上市／上櫃・日線", expanded=
                 st.error(f"行情載入失敗：{exc}；目前仍可使用示範行情。")
 
 df = st.session_state.market_bars
-if df.empty:
-    st.error("目前沒有可播放的行情資料，請重新載入有資料的歷史區間。")
-    st.stop()
 st.caption(f"行情：{st.session_state.market_source}｜{st.session_state.market_symbol} {st.session_state.market_name}｜{len(df)} 根日 K")
 st.session_state.i = min(max(0, int(st.session_state.i)), len(df) - 1)
 
@@ -340,6 +338,7 @@ if st.session_state.replay_completed:
     st.session_state.trades = []
     st.session_state.order_events = []
     st.rerun()
+
 
 # Dynamic loop: a Streamlit fragment reruns frequently while its own clock advances the synthetic session.
 if st.session_state.mode=="Dynamic Replay":

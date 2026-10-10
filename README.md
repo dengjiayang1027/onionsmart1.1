@@ -49,5 +49,5 @@ streamlit run app.py
 
 ## 多人競賽模式（產品與架構草案）
 
-- [多人競賽架構草案](docs/BATTLE_MODE_ARCHITECTURE.md) 定義 QR／邀請連結入房、Guest ID、隨機與盲選標的、全房同步與交易決策窗、玩家獨立帳本、賽後評分和分階段導入 Supabase 的方向。
+- [多人競賽架構草案](docs/BATTLE_MODE_ARCHITECTURE.md) 定義 QR／邀請連結入房、Guest ID、隨機與盲選標的、玩家各自交易且賽後統整、玩家獨立帳本、賽後評分和分階段導入 Supabase 的方向。
 - 競賽目前仍為規劃頁，尚未實作房間服務、同步或排行榜。
