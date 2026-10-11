@@ -7,6 +7,7 @@ MOBILE_CSS = """
 [data-testid="stWidgetLabel"], [data-testid="stWidgetLabel"] p,
 [data-testid="stRadio"] label p {color:#c9d7e2 !important;}
 @media (max-width: 767px) {
+  .st-key-market_source_detail, .st-key-main_home {display:none;}
   .block-container {padding:.5rem .5rem calc(1rem + env(safe-area-inset-bottom)) !important;}
   [data-testid="stElementContainer"]:has(.brand) {display:none;}
   [data-testid="stVerticalBlock"] {gap:.35rem;}

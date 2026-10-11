@@ -64,6 +64,10 @@ if "market_bars" not in st.session_state:
     st.session_state.replay_start_index = 90
 
 with st.expander("📈 選股與期間｜台灣上市／上櫃・日線", expanded=False):
+    if st.button("🏠 回主選單", key="menu_in_settings"):
+        st.session_state.running = False
+        st.session_state.editing_trade = False
+        st.switch_page("app.py")
     choose_col, date_col, action_col = st.columns([2.2, 2.4, 1.2])
     with choose_col:
         market = st.radio("市場", ["上市", "上櫃"], horizontal=True, key="market_venue")
@@ -141,7 +145,8 @@ with st.expander("📈 選股與期間｜台灣上市／上櫃・日線", expand
                 st.error(f"行情載入失敗：{exc}；目前仍可使用示範行情。")
 
 df = st.session_state.market_bars
-st.caption(f"行情：{st.session_state.market_source}｜{st.session_state.market_symbol} {st.session_state.market_name}｜{len(df)} 根日 K")
+with st.container(key="market_source_detail"):
+    st.caption(f"行情：{st.session_state.market_source}｜{st.session_state.market_symbol} {st.session_state.market_name}｜{len(df)} 根日 K")
 st.session_state.i = min(max(0, int(st.session_state.i)), len(df) - 1)
 
 def current_bar():
@@ -180,7 +185,7 @@ if not st.session_state.replay_completed and replay_finished(st.session_state, l
     st.rerun()
 trades=pd.DataFrame(st.session_state.trades)
 
-if st.button("🏠 回主選單"):
+if st.button("🏠 回主選單", key="main_home"):
     st.session_state.running = False
     st.session_state.resume_trade = False
     st.session_state.editing_trade = False
@@ -247,7 +252,7 @@ def render_chart():
        fig.add_hline(y=st.session_state.entry,line_dash="dot",line_color="#f3b64c",annotation_text="Entry")
      if not st.session_state.hidden_drawings:
        for shape in st.session_state.drawings: fig.add_shape(**shape)
-     fig.update_layout(height=220,margin=dict(l=3,r=3,t=2,b=2),paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",xaxis_rangeslider_visible=False,showlegend=False,font=dict(color="#aebdca",size=11),xaxis=dict(gridcolor="#172a37",nticks=7),yaxis=dict(gridcolor="#172a37",side="right"),dragmode="pan")
+     fig.update_layout(height=180,margin=dict(l=3,r=3,t=2,b=2),paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",xaxis_rangeslider_visible=False,showlegend=False,font=dict(color="#aebdca",size=11),xaxis=dict(gridcolor="#172a37",nticks=7),yaxis=dict(gridcolor="#172a37",side="right"),dragmode="pan")
      chart=st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":True,"displaylogo":False,"scrollZoom":False,"staticPlot":False,"modeBarButtonsToAdd":["drawline","drawopenpath","drawrect","drawcircle","drawtext","eraseshape"],"edits":{"shapePosition":True}})
      # Plotly modebar provides trend lines, rectangles, freehand, text, erase, and built-in undo/redo.
      with st.expander("畫線工具與說明"):
@@ -256,17 +261,17 @@ def render_chart():
        if q.button("顯示 / 隱藏圖形",use_container_width=True): st.session_state.hidden_drawings=not st.session_state.hidden_drawings; st.rerun()
        if r.button("刪除圖形",use_container_width=True): st.session_state.drawings=[]; st.rerun()
        st.caption("圖表可用左上工具列畫線、矩形、自由畫筆與文字。動態日 K 僅為 OHLC 推演，並非真實盤中歷史。行情來源：臺灣證券交易所；示範行情為模擬資料。")
-     st.caption("OHLC 模擬路徑；非真實盤中行情。")
+     st.caption(("示範資料｜" if "示範" in st.session_state.market_source else "歷史日線｜") + "OHLC 模擬路徑；非真實盤中行情。")
 
 
 def render_trade_controls():
     with st.container(border=True):
      st.markdown("### 交易操作")
      buy_key, sell_key = st.columns(2)
-     if buy_key.button("⬆ 買入", shortcut="B", use_container_width=True, disabled=st.session_state.replay_completed):
+     if buy_key.button("買入", shortcut="B", use_container_width=True, disabled=st.session_state.replay_completed):
        prepare_trade(1)
        st.rerun()
-     if sell_key.button("⬇ 賣出", shortcut="S", use_container_width=True, disabled=st.session_state.replay_completed):
+     if sell_key.button("賣出", shortcut="S", use_container_width=True, disabled=st.session_state.replay_completed):
        prepare_trade(-1)
        st.rerun()
      if st.session_state.mode == "Dynamic Replay" and not st.session_state.replay_completed:
