@@ -219,7 +219,7 @@ def render_replay_controls():
         elif st.session_state.running: st.caption(f"行情形成中　{st.session_state.progress*100:.0f}%")
       else:
         a,b=st.columns(2)
-        if a.button("▶ 下一根",use_container_width=True): st.session_state.i=min(len(df)-1,st.session_state.i+1); st.session_state.progress=0; st.rerun()
+        if a.button("▶ +1",use_container_width=True): st.session_state.i=min(len(df)-1,st.session_state.i+1); st.session_state.progress=0; st.rerun()
         if b.button("⏩ +5",use_container_width=True): st.session_state.i=min(len(df)-1,st.session_state.i+5); st.session_state.progress=0; st.rerun()
 
 
@@ -247,20 +247,21 @@ def render_chart():
        fig.add_hline(y=st.session_state.entry,line_dash="dot",line_color="#f3b64c",annotation_text="Entry")
      if not st.session_state.hidden_drawings:
        for shape in st.session_state.drawings: fig.add_shape(**shape)
-     fig.update_layout(height=360,margin=dict(l=3,r=3,t=2,b=2),paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",xaxis_rangeslider_visible=False,showlegend=False,font=dict(color="#aebdca",size=11),xaxis=dict(gridcolor="#172a37",nticks=7),yaxis=dict(gridcolor="#172a37",side="right"),dragmode="pan")
+     fig.update_layout(height=220,margin=dict(l=3,r=3,t=2,b=2),paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",xaxis_rangeslider_visible=False,showlegend=False,font=dict(color="#aebdca",size=11),xaxis=dict(gridcolor="#172a37",nticks=7),yaxis=dict(gridcolor="#172a37",side="right"),dragmode="pan")
      chart=st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":True,"displaylogo":False,"scrollZoom":False,"staticPlot":False,"modeBarButtonsToAdd":["drawline","drawopenpath","drawrect","drawcircle","drawtext","eraseshape"],"edits":{"shapePosition":True}})
      # Plotly modebar provides trend lines, rectangles, freehand, text, erase, and built-in undo/redo.
-     p,q,r=st.columns(3)
-     if p.button("↶ Undo",use_container_width=True) and st.session_state.drawings: st.session_state.undo.append(st.session_state.drawings.pop()); st.rerun()
-     if q.button("顯示 / 隱藏圖形",use_container_width=True): st.session_state.hidden_drawings=not st.session_state.hidden_drawings; st.rerun()
-     if r.button("刪除圖形",use_container_width=True): st.session_state.drawings=[]; st.rerun()
-     st.caption("圖表可用左上工具列畫線、矩形、自由畫筆與文字。動態日 K 僅為 OHLC 推演，並非真實盤中歷史。行情來源：臺灣證券交易所；示範行情為模擬資料。")
+     with st.expander("畫線工具與說明"):
+       p,q,r=st.columns(3)
+       if p.button("↶ Undo",use_container_width=True) and st.session_state.drawings: st.session_state.undo.append(st.session_state.drawings.pop()); st.rerun()
+       if q.button("顯示 / 隱藏圖形",use_container_width=True): st.session_state.hidden_drawings=not st.session_state.hidden_drawings; st.rerun()
+       if r.button("刪除圖形",use_container_width=True): st.session_state.drawings=[]; st.rerun()
+       st.caption("圖表可用左上工具列畫線、矩形、自由畫筆與文字。動態日 K 僅為 OHLC 推演，並非真實盤中歷史。行情來源：臺灣證券交易所；示範行情為模擬資料。")
+     st.caption("OHLC 模擬路徑；非真實盤中行情。")
 
 
 def render_trade_controls():
     with st.container(border=True):
      st.markdown("### 交易操作")
-     st.caption("點買入／賣出，再按送出交易確認。電腦亦可用 B／S／Enter；空白控制動態播放。")
      buy_key, sell_key = st.columns(2)
      if buy_key.button("⬆ 買入", shortcut="B", use_container_width=True, disabled=st.session_state.replay_completed):
        prepare_trade(1)
@@ -280,18 +281,20 @@ def render_trade_controls():
        resume_after_trade_action()
        st.rerun()
      trade_disabled = st.session_state.replay_completed or (st.session_state.mode == "Dynamic Replay" and not st.session_state.editing_trade)
-     reasons=st.multiselect("交易理由",["趨勢","回撤","突破","支撐","壓力","均線","RSI","OB","BOS","Liquidity Sweep","其他"],placeholder="選擇交易理由",key="trade_reasons",disabled=trade_disabled)
-     st.session_state.qty=int(st.number_input("數量",min_value=1,value=int(st.session_state.qty),step=1,disabled=trade_disabled))
-     st.session_state.sl_pct=st.number_input("SL %",min_value=0.,step=.1,key="sl_input",disabled=trade_disabled)
-     st.session_state.tp_pct=st.number_input("TP %",min_value=0.,step=.1,key="tp_input",disabled=trade_disabled)
+     with st.expander("數量／理由／SL・TP"):
+       reasons=st.multiselect("交易理由",["趨勢","回撤","突破","支撐","壓力","均線","RSI","OB","BOS","Liquidity Sweep","其他"],placeholder="選擇交易理由",key="trade_reasons",disabled=trade_disabled)
+       st.session_state.qty=int(st.number_input("數量",min_value=1,value=int(st.session_state.qty),step=1,disabled=trade_disabled))
+       st.session_state.sl_pct=st.number_input("SL %",min_value=0.,step=.1,key="sl_input",disabled=trade_disabled)
+       st.session_state.tp_pct=st.number_input("TP %",min_value=0.,step=.1,key="tp_input",disabled=trade_disabled)
      pending_side = st.session_state.get("pending_side", 0)
      if pending_side:
-       st.info(f"待送出：{'買入做多' if pending_side == 1 else '賣出做空'} {st.session_state.qty} 單位，價格 {float(st.session_state.current_bar.Close):.2f}")
-     if st.button("送出交易", shortcut="Enter", type="primary", use_container_width=True, disabled=trade_disabled or not pending_side):
+       st.caption(f"待送出：{'買入做多' if pending_side == 1 else '賣出做空'} {st.session_state.qty} 單位，價格 {float(st.session_state.current_bar.Close):.2f}")
+     send_col, close_col = st.columns(2)
+     if send_col.button("送出交易", shortcut="Enter", type="primary", use_container_width=True, disabled=trade_disabled or not pending_side):
        open_position(st.session_state,pending_side,reasons)
        resume_after_trade_action()
        st.rerun()
-     if st.button("✕ 平倉",use_container_width=True,disabled=trade_disabled):
+     if close_col.button("✕ 平倉",use_container_width=True,disabled=trade_disabled):
        st.session_state.running=False
        close_position(st.session_state,"Manual",reasons); resume_after_trade_action(); st.rerun()
      a,b=st.columns(2)
