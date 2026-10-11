@@ -10,6 +10,7 @@ from replay_engine import interpolate_bar, advance_clock, replay_finished
 from trading_engine import open_position, close_position, log_order
 from scorecard import METRICS, compute_scorecard
 import market_data
+from mobile_layout import MOBILE_CSS
 
 fetch_twse_daily = market_data.fetch_twse_daily
 listed_instruments = market_data.listed_instruments
@@ -39,6 +40,8 @@ div[data-testid="stVerticalBlockBorderWrapper"]>div{background:#0d1822;border:1p
 .cardgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;padding-bottom:10px}.card{background:#111f2a;border:1px solid #223544;border-radius:9px;padding:8px 9px;min-height:56px}.card .k{font-size:12px;color:#8094a4}.card .v{font-size:18px;font-weight:850;margin-top:3px}
 </style>""", unsafe_allow_html=True)
 
+st.markdown(MOBILE_CSS, unsafe_allow_html=True)
+
 @st.cache_data(show_spinner=False)
 def make_data(n=320, seed=12):
     rng=np.random.default_rng(seed); r=rng.normal(.0007,.012,n); close=450*np.cumprod(1+r); close=close/close[-1]*525
@@ -60,7 +63,7 @@ if "market_bars" not in st.session_state:
     st.session_state.market_source = "示範行情（模擬資料）"
     st.session_state.replay_start_index = 90
 
-with st.expander("📈 行情設定｜台灣上市／上櫃・日線", expanded=False):
+with st.expander("📈 選股與期間｜台灣上市／上櫃・日線", expanded=False):
     choose_col, date_col, action_col = st.columns([2.2, 2.4, 1.2])
     with choose_col:
         market = st.radio("市場", ["上市", "上櫃"], horizontal=True, key="market_venue")
@@ -184,125 +187,141 @@ if st.button("🏠 回主選單"):
     st.session_state.last_tick = time.time()
     st.switch_page("app.py")
 st.markdown('<div class="brand">🧅 蔥明錢 <span class="sub">交易訓練模式</span></div>',unsafe_allow_html=True)
-left,right=st.columns([2.55,7.45],gap="small")
-with left:
-  with st.container(border=True):
-    st.session_state.mode=st.radio("Replay 模式",["Manual Replay","Dynamic Replay"],horizontal=True,index=0 if st.session_state.mode=="Manual Replay" else 1)
-    if st.session_state.mode != st.session_state.previous_mode:
-      s = st.session_state
-      s.running = False
-      s.editing_trade = False
-      s.resume_trade = False
-      s.pending_side = 0
-      s.pause_until = 0.0
-      s.last_tick = time.time()
-      if s.mode == "Dynamic Replay":
-        s.progress = 1.0  # The manual candle was already revealed.
-        if s.i < len(df) - 1:
-          s.i += 1
-          s.progress = 0.0
-      s.previous_mode = s.mode
-      st.rerun()
-    if st.session_state.mode=="Dynamic Replay":
-      with st.expander("動態回放設定"):
-        st.number_input("每根決策次數", min_value=0, max_value=4, key="decision_count", disabled=st.session_state.running)
-        st.number_input("決策秒數", min_value=1, max_value=30, key="decision_seconds", disabled=st.session_state.running)
-      st.caption("每根日 K 行情演進 8 秒，決策與交易操作時間另計；路徑為 OHLC 模擬。")
-      play_label = "⏸ 暫停" if st.session_state.running else "▶ 開始 / 繼續"
-      if st.button(play_label,use_container_width=True,shortcut="Space",disabled=st.session_state.replay_completed or st.session_state.editing_trade):
-        st.session_state.running = not st.session_state.running
-        if st.session_state.running: st.session_state.last_tick=time.time()
+def render_replay_controls():
+    with st.container(border=True):
+      st.session_state.mode=st.radio("Replay 模式",["Manual Replay","Dynamic Replay"],horizontal=True,index=0 if st.session_state.mode=="Manual Replay" else 1)
+      if st.session_state.mode != st.session_state.previous_mode:
+        s = st.session_state
+        s.running = False
+        s.editing_trade = False
+        s.resume_trade = False
+        s.pending_side = 0
+        s.pause_until = 0.0
+        s.last_tick = time.time()
+        if s.mode == "Dynamic Replay":
+          s.progress = 1.0  # The manual candle was already revealed.
+          if s.i < len(df) - 1:
+            s.i += 1
+            s.progress = 0.0
+        s.previous_mode = s.mode
         st.rerun()
-      if st.session_state.pause_until>time.time(): st.warning(f"市場暫停 {max(1,int(st.session_state.pause_until-time.time()+.99))} 秒｜{st.session_state.pause_reason}")
-      elif st.session_state.running: st.caption(f"行情形成中　{st.session_state.progress*100:.0f}%")
-    else:
-      a,b=st.columns(2)
-      if a.button("▶ 下一根",use_container_width=True): st.session_state.i=min(len(df)-1,st.session_state.i+1); st.session_state.progress=0; st.rerun()
-      if b.button("⏩ +5 根",use_container_width=True): st.session_state.i=min(len(df)-1,st.session_state.i+5); st.session_state.progress=0; st.rerun()
-  with st.container(border=True):
-    st.markdown("### 交易統計")
-    total=float(trades["損益"].sum()) if not trades.empty else 0
-    wr=float((trades["損益"]>0).mean()*100) if not trades.empty else 0
-    count=len(trades); avg=float(trades["R"].mean()) if count else 0
-    best=float(trades["損益"].max()) if count else 0; worst=float(trades["損益"].min()) if count else 0
-    st.markdown(f'<div class="cardgrid"><div class="card"><div class="k">總損益</div><div class="v">{total:+,.0f}</div></div><div class="card"><div class="k">勝率</div><div class="v">{wr:.0f}%</div></div><div class="card"><div class="k">交易次數</div><div class="v">{count}</div></div><div class="card"><div class="k">平均 R</div><div class="v">{avg:.2f}</div></div><div class="card"><div class="k">最大獲利</div><div class="v">{best:+,.0f}</div></div><div class="card"><div class="k">最大虧損</div><div class="v">{worst:+,.0f}</div></div></div>',unsafe_allow_html=True)
-with right:
-  chart_col, trade_col = st.columns([7.3,2.7],gap="small")
-  with chart_col:
-   with st.container(border=True):
-    row=st.session_state.current_bar
-    h1,h2,h3=st.columns([2.1,1.2,4.7]); h1.markdown(f"### {st.session_state.market_symbol} {st.session_state.market_name}"); h2.markdown(f"**{row.Date.date()}**")
-    h3.markdown(f"開 {row.Open:.1f}　高 {row.High:.1f}　低 {row.Low:.1f}　現價 **{row.Close:.1f}**")
-    start=max(0,st.session_state.i-119); vis=df.iloc[start:st.session_state.i+1].copy()
-    if st.session_state.mode=="Dynamic Replay":
-      evolving=interpolate_bar(df.iloc[st.session_state.i],st.session_state.i,st.session_state.progress)
-      vis=vis.iloc[:-1].copy(); vis=pd.concat([vis,pd.DataFrame([{**evolving,"Date":row.Date}])],ignore_index=True)
-    fig=go.Figure(go.Candlestick(x=vis.Date,open=vis.Open,high=vis.High,low=vis.Low,close=vis.Close,name="價格"))
-    if st.session_state.pos:
-      fig.add_hline(y=st.session_state.entry,line_dash="dot",line_color="#f3b64c",annotation_text="Entry")
-    if not st.session_state.hidden_drawings:
-      for shape in st.session_state.drawings: fig.add_shape(**shape)
-    fig.update_layout(height=500,margin=dict(l=3,r=3,t=2,b=2),paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",xaxis_rangeslider_visible=False,showlegend=False,font=dict(color="#aebdca",size=11),xaxis=dict(gridcolor="#172a37",nticks=7),yaxis=dict(gridcolor="#172a37",side="right"),dragmode="pan")
-    chart=st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":True,"scrollZoom":False,"staticPlot":False,"modeBarButtonsToAdd":["drawline","drawopenpath","drawrect","drawcircle","drawtext","eraseshape"],"edits":{"shapePosition":True}})
-    # Plotly modebar provides trend lines, rectangles, freehand, text, erase, and built-in undo/redo.
-    p,q,r=st.columns(3)
-    if p.button("↶ Undo",use_container_width=True) and st.session_state.drawings: st.session_state.undo.append(st.session_state.drawings.pop()); st.rerun()
-    if q.button("顯示 / 隱藏圖形",use_container_width=True): st.session_state.hidden_drawings=not st.session_state.hidden_drawings; st.rerun()
-    if r.button("刪除圖形",use_container_width=True): st.session_state.drawings=[]; st.rerun()
-    st.caption("圖表可用左上工具列畫線、矩形、自由畫筆與文字。動態日 K 僅為 OHLC 推演，並非真實盤中歷史。行情來源：臺灣證券交易所；示範行情為模擬資料。")
-  with trade_col:
-   with st.container(border=True):
-    st.markdown("### 交易操作")
-    st.caption("空白：動態開始／暫停 · B：買入 · S：賣出 · Enter：送出。SELL 為做空／反向開倉；減少多單請用減碼或平倉。")
-    buy_key, sell_key = st.columns(2)
-    if buy_key.button("⬆ BUY 做多", shortcut="B", disabled=st.session_state.replay_completed):
-      prepare_trade(1)
-      st.rerun()
-    if sell_key.button("⬇ SELL 做空", shortcut="S", disabled=st.session_state.replay_completed):
-      prepare_trade(-1)
-      st.rerun()
-    if st.session_state.mode == "Dynamic Replay" and not st.session_state.replay_completed:
-      if not st.session_state.editing_trade:
-        if st.button("暫停並編輯交易", use_container_width=True):
-          st.session_state.resume_trade = st.session_state.running
-          st.session_state.running = False
-          st.session_state.editing_trade = True
-          st.session_state.last_tick = time.time()
+      if st.session_state.mode=="Dynamic Replay":
+        with st.expander("動態回放設定"):
+          st.number_input("每根決策次數", min_value=0, max_value=4, key="decision_count", disabled=st.session_state.running)
+          st.number_input("決策秒數", min_value=1, max_value=30, key="decision_seconds", disabled=st.session_state.running)
+        st.caption("每根日 K 行情演進 8 秒，決策與交易操作時間另計；路徑為 OHLC 模擬。")
+        play_label = "⏸ 暫停" if st.session_state.running else "▶ 開始 / 繼續"
+        if st.button(play_label,use_container_width=True,shortcut="Space",disabled=st.session_state.replay_completed or st.session_state.editing_trade):
+          st.session_state.running = not st.session_state.running
+          if st.session_state.running: st.session_state.last_tick=time.time()
           st.rerun()
-    if st.session_state.editing_trade and st.button("取消編輯", use_container_width=True):
-      resume_after_trade_action()
-      st.rerun()
-    trade_disabled = st.session_state.replay_completed or (st.session_state.mode == "Dynamic Replay" and not st.session_state.editing_trade)
-    reasons=st.multiselect("交易理由",["趨勢","回撤","突破","支撐","壓力","均線","RSI","OB","BOS","Liquidity Sweep","其他"],placeholder="選擇交易理由",key="trade_reasons",disabled=trade_disabled)
-    st.session_state.qty=int(st.number_input("數量",min_value=1,value=int(st.session_state.qty),step=1,disabled=trade_disabled))
-    st.session_state.sl_pct=st.number_input("SL %",min_value=0.,step=.1,key="sl_input",disabled=trade_disabled)
-    st.session_state.tp_pct=st.number_input("TP %",min_value=0.,step=.1,key="tp_input",disabled=trade_disabled)
-    pending_side = st.session_state.get("pending_side", 0)
-    if pending_side:
-      st.info(f"待送出：{'買入做多' if pending_side == 1 else '賣出做空'} {st.session_state.qty} 單位，價格 {float(st.session_state.current_bar.Close):.2f}")
-    if st.button("送出交易", shortcut="Enter", type="primary", use_container_width=True, disabled=trade_disabled or not pending_side):
-      open_position(st.session_state,pending_side,reasons)
-      resume_after_trade_action()
-      st.rerun()
-    if st.button("✕ 平倉",use_container_width=True,disabled=trade_disabled):
-      st.session_state.running=False
-      close_position(st.session_state,"Manual",reasons); resume_after_trade_action(); st.rerun()
-    a,b=st.columns(2)
-    if a.button("＋ 加碼",use_container_width=True,disabled=trade_disabled):
-      st.session_state.running=False
-      if st.session_state.pos:
-        st.session_state.qty+=1; st.session_state.entry_qty+=1; log_order(st.session_state,"加碼",reasons)
-      resume_after_trade_action(); st.rerun()
-    if b.button("－ 減碼",use_container_width=True,disabled=trade_disabled):
-      st.session_state.running=False
-      if st.session_state.pos and st.session_state.entry_qty>1:
-        st.session_state.qty=max(1,st.session_state.qty-1); st.session_state.entry_qty-=1; log_order(st.session_state,"減碼",reasons)
-      resume_after_trade_action(); st.rerun()
-    status="FLAT" if not st.session_state.pos else ("LONG" if st.session_state.pos==1 else "SHORT")
-    if st.session_state.pos:
-      upnl=(float(st.session_state.current_bar.Close)-st.session_state.entry)/st.session_state.entry*st.session_state.pos*100
-      st.caption(f"部位：{status} ｜ 未實現：{upnl:+.2f}%")
-    else: st.caption("部位：FLAT")
+        if st.session_state.pause_until>time.time(): st.warning(f"市場暫停 {max(1,int(st.session_state.pause_until-time.time()+.99))} 秒｜{st.session_state.pause_reason}")
+        elif st.session_state.running: st.caption(f"行情形成中　{st.session_state.progress*100:.0f}%")
+      else:
+        a,b=st.columns(2)
+        if a.button("▶ 下一根",use_container_width=True): st.session_state.i=min(len(df)-1,st.session_state.i+1); st.session_state.progress=0; st.rerun()
+        if b.button("⏩ +5 根",use_container_width=True): st.session_state.i=min(len(df)-1,st.session_state.i+5); st.session_state.progress=0; st.rerun()
+
+
+def render_statistics():
+    with st.container(border=True):
+      st.markdown("### 交易統計")
+      total=float(trades["損益"].sum()) if not trades.empty else 0
+      wr=float((trades["損益"]>0).mean()*100) if not trades.empty else 0
+      count=len(trades); avg=float(trades["R"].mean()) if count else 0
+      best=float(trades["損益"].max()) if count else 0; worst=float(trades["損益"].min()) if count else 0
+      st.markdown(f'<div class="cardgrid"><div class="card"><div class="k">總損益</div><div class="v">{total:+,.0f}</div></div><div class="card"><div class="k">勝率</div><div class="v">{wr:.0f}%</div></div><div class="card"><div class="k">交易次數</div><div class="v">{count}</div></div><div class="card"><div class="k">平均 R</div><div class="v">{avg:.2f}</div></div><div class="card"><div class="k">最大獲利</div><div class="v">{best:+,.0f}</div></div><div class="card"><div class="k">最大虧損</div><div class="v">{worst:+,.0f}</div></div></div>',unsafe_allow_html=True)
+
+
+def render_chart():
+    with st.container(border=True):
+     row=st.session_state.current_bar
+     st.markdown(f"### {st.session_state.market_symbol} {st.session_state.market_name}　{row.Date.date()}")
+     st.markdown(f"開 {row.Open:.1f}　高 {row.High:.1f}　低 {row.Low:.1f}　現價 **{row.Close:.1f}**")
+     start=max(0,st.session_state.i-119); vis=df.iloc[start:st.session_state.i+1].copy()
+     if st.session_state.mode=="Dynamic Replay":
+       evolving=interpolate_bar(df.iloc[st.session_state.i],st.session_state.i,st.session_state.progress)
+       vis=vis.iloc[:-1].copy(); vis=pd.concat([vis,pd.DataFrame([{**evolving,"Date":row.Date}])],ignore_index=True)
+     fig=go.Figure(go.Candlestick(x=vis.Date,open=vis.Open,high=vis.High,low=vis.Low,close=vis.Close,name="價格"))
+     if st.session_state.pos:
+       fig.add_hline(y=st.session_state.entry,line_dash="dot",line_color="#f3b64c",annotation_text="Entry")
+     if not st.session_state.hidden_drawings:
+       for shape in st.session_state.drawings: fig.add_shape(**shape)
+     fig.update_layout(height=360,margin=dict(l=3,r=3,t=2,b=2),paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",xaxis_rangeslider_visible=False,showlegend=False,font=dict(color="#aebdca",size=11),xaxis=dict(gridcolor="#172a37",nticks=7),yaxis=dict(gridcolor="#172a37",side="right"),dragmode="pan")
+     chart=st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":True,"displaylogo":False,"scrollZoom":False,"staticPlot":False,"modeBarButtonsToAdd":["drawline","drawopenpath","drawrect","drawcircle","drawtext","eraseshape"],"edits":{"shapePosition":True}})
+     # Plotly modebar provides trend lines, rectangles, freehand, text, erase, and built-in undo/redo.
+     p,q,r=st.columns(3)
+     if p.button("↶ Undo",use_container_width=True) and st.session_state.drawings: st.session_state.undo.append(st.session_state.drawings.pop()); st.rerun()
+     if q.button("顯示 / 隱藏圖形",use_container_width=True): st.session_state.hidden_drawings=not st.session_state.hidden_drawings; st.rerun()
+     if r.button("刪除圖形",use_container_width=True): st.session_state.drawings=[]; st.rerun()
+     st.caption("圖表可用左上工具列畫線、矩形、自由畫筆與文字。動態日 K 僅為 OHLC 推演，並非真實盤中歷史。行情來源：臺灣證券交易所；示範行情為模擬資料。")
+
+
+def render_trade_controls():
+    with st.container(border=True):
+     st.markdown("### 交易操作")
+     st.caption("點買入／賣出，再按送出交易確認。電腦亦可用 B／S／Enter；空白控制動態播放。")
+     buy_key, sell_key = st.columns(2)
+     if buy_key.button("⬆ BUY 做多", shortcut="B", disabled=st.session_state.replay_completed):
+       prepare_trade(1)
+       st.rerun()
+     if sell_key.button("⬇ SELL 做空", shortcut="S", disabled=st.session_state.replay_completed):
+       prepare_trade(-1)
+       st.rerun()
+     if st.session_state.mode == "Dynamic Replay" and not st.session_state.replay_completed:
+       if not st.session_state.editing_trade:
+         if st.button("暫停並編輯交易", use_container_width=True):
+           st.session_state.resume_trade = st.session_state.running
+           st.session_state.running = False
+           st.session_state.editing_trade = True
+           st.session_state.last_tick = time.time()
+           st.rerun()
+     if st.session_state.editing_trade and st.button("取消編輯", use_container_width=True):
+       resume_after_trade_action()
+       st.rerun()
+     trade_disabled = st.session_state.replay_completed or (st.session_state.mode == "Dynamic Replay" and not st.session_state.editing_trade)
+     reasons=st.multiselect("交易理由",["趨勢","回撤","突破","支撐","壓力","均線","RSI","OB","BOS","Liquidity Sweep","其他"],placeholder="選擇交易理由",key="trade_reasons",disabled=trade_disabled)
+     st.session_state.qty=int(st.number_input("數量",min_value=1,value=int(st.session_state.qty),step=1,disabled=trade_disabled))
+     st.session_state.sl_pct=st.number_input("SL %",min_value=0.,step=.1,key="sl_input",disabled=trade_disabled)
+     st.session_state.tp_pct=st.number_input("TP %",min_value=0.,step=.1,key="tp_input",disabled=trade_disabled)
+     pending_side = st.session_state.get("pending_side", 0)
+     if pending_side:
+       st.info(f"待送出：{'買入做多' if pending_side == 1 else '賣出做空'} {st.session_state.qty} 單位，價格 {float(st.session_state.current_bar.Close):.2f}")
+     if st.button("送出交易", shortcut="Enter", type="primary", use_container_width=True, disabled=trade_disabled or not pending_side):
+       open_position(st.session_state,pending_side,reasons)
+       resume_after_trade_action()
+       st.rerun()
+     if st.button("✕ 平倉",use_container_width=True,disabled=trade_disabled):
+       st.session_state.running=False
+       close_position(st.session_state,"Manual",reasons); resume_after_trade_action(); st.rerun()
+     a,b=st.columns(2)
+     if a.button("＋ 加碼",use_container_width=True,disabled=trade_disabled):
+       st.session_state.running=False
+       if st.session_state.pos:
+         st.session_state.qty+=1; st.session_state.entry_qty+=1; log_order(st.session_state,"加碼",reasons)
+       resume_after_trade_action(); st.rerun()
+     if b.button("－ 減碼",use_container_width=True,disabled=trade_disabled):
+       st.session_state.running=False
+       if st.session_state.pos and st.session_state.entry_qty>1:
+         st.session_state.qty=max(1,st.session_state.qty-1); st.session_state.entry_qty-=1; log_order(st.session_state,"減碼",reasons)
+       resume_after_trade_action(); st.rerun()
+     status="FLAT" if not st.session_state.pos else ("LONG" if st.session_state.pos==1 else "SHORT")
+     if st.session_state.pos:
+       upnl=(float(st.session_state.current_bar.Close)-st.session_state.entry)/st.session_state.entry*st.session_state.pos*100
+       st.caption(f"部位：{status} ｜ 未實現：{upnl:+.2f}%")
+     else: st.caption("部位：FLAT")
+
+
+with st.container(key="price_chart"):
+    render_chart()
+with st.container(key="training_controls"):
+    replay_col, trade_col = st.columns([.9, 1.5], gap="small")
+    with replay_col:
+        render_replay_controls()
+    with trade_col:
+        render_trade_controls()
+with st.container(key="trade_statistics"):
+    render_statistics()
 with st.container(border=True):
   st.markdown("### Trade Record｜已平倉交易")
   if trades.empty: st.caption("尚無已平倉交易。")
