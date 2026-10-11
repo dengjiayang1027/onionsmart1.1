@@ -189,7 +189,7 @@ if st.button("🏠 回主選單"):
 st.markdown('<div class="brand">🧅 蔥明錢 <span class="sub">交易訓練模式</span></div>',unsafe_allow_html=True)
 def render_replay_controls():
     with st.container(border=True):
-      st.session_state.mode=st.radio("Replay 模式",["Manual Replay","Dynamic Replay"],horizontal=True,index=0 if st.session_state.mode=="Manual Replay" else 1)
+      st.session_state.mode=st.radio("Replay 模式",["Manual Replay","Dynamic Replay"],horizontal=True,format_func=lambda value: "手動" if value == "Manual Replay" else "自動",index=0 if st.session_state.mode=="Manual Replay" else 1)
       if st.session_state.mode != st.session_state.previous_mode:
         s = st.session_state
         s.running = False
@@ -220,7 +220,7 @@ def render_replay_controls():
       else:
         a,b=st.columns(2)
         if a.button("▶ 下一根",use_container_width=True): st.session_state.i=min(len(df)-1,st.session_state.i+1); st.session_state.progress=0; st.rerun()
-        if b.button("⏩ +5 根",use_container_width=True): st.session_state.i=min(len(df)-1,st.session_state.i+5); st.session_state.progress=0; st.rerun()
+        if b.button("⏩ +5",use_container_width=True): st.session_state.i=min(len(df)-1,st.session_state.i+5); st.session_state.progress=0; st.rerun()
 
 
 def render_statistics():
@@ -262,10 +262,10 @@ def render_trade_controls():
      st.markdown("### 交易操作")
      st.caption("點買入／賣出，再按送出交易確認。電腦亦可用 B／S／Enter；空白控制動態播放。")
      buy_key, sell_key = st.columns(2)
-     if buy_key.button("⬆ BUY 做多", shortcut="B", disabled=st.session_state.replay_completed):
+     if buy_key.button("⬆ 買入", shortcut="B", use_container_width=True, disabled=st.session_state.replay_completed):
        prepare_trade(1)
        st.rerun()
-     if sell_key.button("⬇ SELL 做空", shortcut="S", disabled=st.session_state.replay_completed):
+     if sell_key.button("⬇ 賣出", shortcut="S", use_container_width=True, disabled=st.session_state.replay_completed):
        prepare_trade(-1)
        st.rerun()
      if st.session_state.mode == "Dynamic Replay" and not st.session_state.replay_completed:
