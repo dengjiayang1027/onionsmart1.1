@@ -5,6 +5,7 @@ import numpy as np
 import plotly.graph_objects as go
 from datetime import date, timedelta
 from pathlib import Path
+from html import escape
 
 from replay_engine import interpolate_bar, advance_clock, replay_finished
 from trading_engine import open_position, close_position, log_order
@@ -241,18 +242,19 @@ def render_statistics():
 def render_chart():
     with st.container(border=True):
      row=st.session_state.current_bar
-     st.markdown(f"### {st.session_state.market_symbol} {st.session_state.market_name}　{row.Date.date()}")
-     st.markdown(f"開 {row.Open:.1f}　高 {row.High:.1f}　低 {row.Low:.1f}　現價 **{row.Close:.1f}**")
+     st.markdown(f'<div class="market-heading"><div><strong>{escape(st.session_state.market_symbol)} {escape(st.session_state.market_name)}</strong><small>{row.Date.date()} · 1D</small></div><div class="live-quote">{row.Close:.2f}<small>當前價格</small></div></div>',unsafe_allow_html=True)
+     st.caption(f"開 {row.Open:.1f}　高 {row.High:.1f}　低 {row.Low:.1f}")
      start=max(0,st.session_state.i-119); vis=df.iloc[start:st.session_state.i+1].copy()
      if st.session_state.mode=="Dynamic Replay":
        evolving=interpolate_bar(df.iloc[st.session_state.i],st.session_state.i,st.session_state.progress)
        vis=vis.iloc[:-1].copy(); vis=pd.concat([vis,pd.DataFrame([{**evolving,"Date":row.Date}])],ignore_index=True)
-     fig=go.Figure(go.Candlestick(x=vis.Date,open=vis.Open,high=vis.High,low=vis.Low,close=vis.Close,name="價格"))
+     fig=go.Figure(go.Candlestick(x=vis.Date,open=vis.Open,high=vis.High,low=vis.Low,close=vis.Close,name="價格",increasing_line_color="#20ce78",decreasing_line_color="#ed3768",increasing_fillcolor="#20ce78",decreasing_fillcolor="#ed3768"))
+     fig.add_hline(y=float(row.Close), line_dash="dot", line_color="#20ce78", line_width=1)
      if st.session_state.pos:
        fig.add_hline(y=st.session_state.entry,line_dash="dot",line_color="#f3b64c",annotation_text="Entry")
      if not st.session_state.hidden_drawings:
        for shape in st.session_state.drawings: fig.add_shape(**shape)
-     fig.update_layout(height=180,margin=dict(l=3,r=3,t=2,b=2),paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",xaxis_rangeslider_visible=False,showlegend=False,font=dict(color="#aebdca",size=11),xaxis=dict(gridcolor="#172a37",nticks=7),yaxis=dict(gridcolor="#172a37",side="right"),dragmode="pan")
+     fig.update_layout(height=210,margin=dict(l=3,r=3,t=2,b=2),paper_bgcolor="rgba(0,0,0,0)",plot_bgcolor="rgba(0,0,0,0)",xaxis_rangeslider_visible=False,showlegend=False,font=dict(color="#aebdca",size=11),xaxis=dict(gridcolor="#172a37",nticks=7),yaxis=dict(gridcolor="#172a37",side="right"),dragmode="pan")
      chart=st.plotly_chart(fig,use_container_width=True,config={"displayModeBar":True,"displaylogo":False,"scrollZoom":False,"staticPlot":False,"modeBarButtonsToAdd":["drawline","drawopenpath","drawrect","drawcircle","drawtext","eraseshape"],"edits":{"shapePosition":True}})
      # Plotly modebar provides trend lines, rectangles, freehand, text, erase, and built-in undo/redo.
      with st.expander("畫線工具與說明"):
@@ -268,10 +270,10 @@ def render_trade_controls():
     with st.container(border=True):
      st.markdown("### 交易操作")
      buy_key, sell_key = st.columns(2)
-     if buy_key.button("買入", shortcut="B", use_container_width=True, disabled=st.session_state.replay_completed):
+     if buy_key.button("買入", key="buy_action", shortcut="B", use_container_width=True, disabled=st.session_state.replay_completed):
        prepare_trade(1)
        st.rerun()
-     if sell_key.button("賣出", shortcut="S", use_container_width=True, disabled=st.session_state.replay_completed):
+     if sell_key.button("賣出", key="sell_action", shortcut="S", use_container_width=True, disabled=st.session_state.replay_completed):
        prepare_trade(-1)
        st.rerun()
      if st.session_state.mode == "Dynamic Replay" and not st.session_state.replay_completed:
@@ -295,11 +297,11 @@ def render_trade_controls():
      if pending_side:
        st.caption(f"待送出：{'買入做多' if pending_side == 1 else '賣出做空'} {st.session_state.qty} 單位，價格 {float(st.session_state.current_bar.Close):.2f}")
      send_col, close_col = st.columns(2)
-     if send_col.button("送出交易", shortcut="Enter", type="primary", use_container_width=True, disabled=trade_disabled or not pending_side):
+     if send_col.button("送出交易", key="submit_action", shortcut="Enter", type="primary", use_container_width=True, disabled=trade_disabled or not pending_side):
        open_position(st.session_state,pending_side,reasons)
        resume_after_trade_action()
        st.rerun()
-     if close_col.button("✕ 平倉",use_container_width=True,disabled=trade_disabled):
+     if close_col.button("✕ 平倉",key="close_action",use_container_width=True,disabled=trade_disabled):
        st.session_state.running=False
        close_position(st.session_state,"Manual",reasons); resume_after_trade_action(); st.rerun()
      a,b=st.columns(2)

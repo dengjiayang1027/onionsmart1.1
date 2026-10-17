@@ -2,11 +2,26 @@
 
 MOBILE_CSS = """
 <style>
+.market-heading {display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.market-heading strong {font-size:18px;color:#f4f4f8;}
+.market-heading small {display:block;font-size:11px;color:#8e93a3;margin-top:3px;}
+.live-quote {color:#20ce78;font-size:22px;font-weight:800;text-align:right;font-variant-numeric:tabular-nums;}
+.st-key-buy_action button {background:#20ce78 !important;color:#06190e !important;border:1px solid #20ce78 !important;}
+.st-key-sell_action button {background:#ed3768 !important;color:#fff !important;border:1px solid #ed3768 !important;}
+.st-key-submit_action button:not(:disabled) {background:#20ce78 !important;color:#06190e !important;border-color:#20ce78 !important;}
+.st-key-close_action button {background:#252936 !important;color:#e4e7ef !important;}
 .st-key-price_chart .modebar {max-width:100%; overflow-x:auto;}
 .st-key-price_chart .modebar-group {float:none; display:inline-block;}
 [data-testid="stWidgetLabel"], [data-testid="stWidgetLabel"] p,
 [data-testid="stRadio"] label p {color:#c9d7e2 !important;}
 @media (max-width: 767px) {
+  html,body,[data-testid="stAppViewContainer"] {background:#0d0d13 !important;}
+  div[data-testid="stVerticalBlockBorderWrapper"]>div {background:#111219;border:1px solid #242530;border-radius:16px;}
+  .stButton button {background:#1c2030;border:1px solid #2b2e3b;border-radius:12px;}
+  .st-key-price_chart {border-bottom:1px solid #242530;}
+  .st-key-training_controls {padding-top:3px;}
+  .st-key-training_controls [data-testid="stExpander"] {background:#191d29;border-radius:10px;}
+  .st-key-training_controls h3 {color:#e8eaf0;letter-spacing:.03em;}
   .st-key-market_source_detail, .st-key-main_home {display:none;}
   .block-container {padding:.5rem .5rem calc(1rem + env(safe-area-inset-bottom)) !important;}
   [data-testid="stElementContainer"]:has(.brand) {display:none;}
