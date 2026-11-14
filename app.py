@@ -41,43 +41,26 @@ st.markdown(
 
 st.markdown(
     '<div class="hero"><h1>🧅 蔥明錢 Lite</h1>'
-    '<p>從個人練習到團隊協作，打造你的交易決策力</p></div>',
+    '<p>一百萬本金，同場對戰，四分鐘決勝負</p></div>',
     unsafe_allow_html=True,
 )
 
-left, middle, right = st.columns(3, gap="medium")
+battle_col, practice_col, team_col = st.columns([1.3, 1, 1], gap='medium')
 
-with left:
-    with st.container(border=True):
-        st.markdown('<div class="mode-icon">👤</div>', unsafe_allow_html=True)
-        st.subheader("交易員")
-        st.markdown(
-            '<div class="mode-copy">進入原有交易訓練介面，使用手動或動態 K 線回放，'
-            '練習進出場、風險管理與復盤。</div>',
-            unsafe_allow_html=True,
-        )
-        st.page_link("pages/1_交易員.py", label="進入交易員模式", icon="👤", use_container_width=True)
-
-with middle:
-    with st.container(border=True):
-        st.markdown('<div class="mode-icon">🏦</div>', unsafe_allow_html=True)
-        st.subheader("交易團隊")
-        st.markdown(
-            '<div class="mode-copy">與夥伴共同管理虛擬資金，'
-            '追蹤經理人績效、團隊持倉與風險。</div>',
-            unsafe_allow_html=True,
-        )
-        st.page_link("pages/2_交易團隊.py", label="查看交易團隊", icon="🏦", use_container_width=True)
-
-with right:
+with battle_col:
     with st.container(border=True):
         st.markdown('<div class="mode-icon">🏆</div>', unsafe_allow_html=True)
-        st.subheader("多人競賽")
-        st.markdown(
-            '<div class="mode-copy">和其他玩家在相同行情與起始條件下比賽，'
-            '用交易表現爭取排行榜名次。</div>',
-            unsafe_allow_html=True,
-        )
-        st.page_link("pages/3_多人競賽.py", label="查看多人競賽", icon="🏆", use_container_width=True)
-
-st.caption("訪客可直接開始交易練習。團隊協作、多人同步與帳號保存將於後續階段推出。")
+        st.subheader('對戰模式')
+        st.markdown('<div class="mode-copy">建立房間、邀請朋友，或挑戰大盤定期定額。最多四位玩家，同一行情、各自操作。</div>', unsafe_allow_html=True)
+        st.page_link('pages/3_多人競賽.py',label='進入對戰房間',icon='🏆',use_container_width=True)
+with practice_col:
+    with st.container(border=True):
+        st.subheader('👤 單人練習')
+        st.markdown('<div class="mode-copy">保留手動與動態回放、交易紀錄、六軸成績單與九型人格。</div>',unsafe_allow_html=True)
+        st.page_link('pages/1_交易員.py',label='進入交易員模式',icon='👤',use_container_width=True)
+with team_col:
+    with st.container(border=True):
+        st.subheader('🏦 交易團隊')
+        st.markdown('<div class="mode-copy">團隊共用資金與協作仍在規劃中。</div>',unsafe_allow_html=True)
+        st.page_link('pages/2_交易團隊.py',label='查看交易團隊',icon='🏦',use_container_width=True)
+st.caption('對戰測試版：不計費稅與權息。網站重啟可能清除房間；尚未提供永久保存。')
