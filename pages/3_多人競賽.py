@@ -4,6 +4,7 @@ import time
 import streamlit as st
 import streamlit.components.v1 as components
 from battle import store
+from battle.component import terminal
 from battle.market import prepare, POOL
 
 st.set_page_config(page_title='對戰模式｜蔥明錢', page_icon='🏆', layout='centered', initial_sidebar_state='collapsed')
@@ -12,7 +13,6 @@ st.markdown('''<style>
 [data-testid="stHeader"]{display:none}.stButton button{min-height:44px;border-radius:11px}
 [data-testid="stWidgetLabel"] p{color:#b9c5d5}input{font-size:16px!important}
 </style>''', unsafe_allow_html=True)
-terminal = components.declare_component('onion_battle_terminal', path=str(Path(__file__).resolve().parent.parent / 'battle' / 'frontend'))
 
 incoming = str(st.query_params.get('room', '')).strip().upper()
 if incoming and (len(incoming) != 8 or any(c not in '0123456789ABCDEF' for c in incoming)):
