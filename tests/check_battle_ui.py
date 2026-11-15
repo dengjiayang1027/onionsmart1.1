@@ -38,7 +38,20 @@ guest.run()
 assert not host.exception, host.exception
 assert not guest.exception, guest.exception
 assert any('全員完成' in x.value for x in host.success)
+next(b for b in host.button if b.label=='🔁 再來一局（保留隊伍）').click().run()
+guest.run()
+assert not host.exception, host.exception
+assert not guest.exception, guest.exception
+assert host.session_state['battle_code']==guest.session_state['battle_code']==code
+assert host.session_state['battle_token']==host_token
+assert store.snapshot(code,host_token)['round']==2
+with patch('battle.market.prepare', return_value=question()):
+    next(b for b in host.button if b.label=='▶ 開始對戰').click().run()
+guest.run()
+assert not host.exception, host.exception
+assert not guest.exception, guest.exception
+assert store.snapshot(code,host_token)['status']=='playing'
 home=AppTest.from_file(str(root/'app.py')).run(timeout=40)
 assert not home.exception,home.exception
-print('PASS: auto room, invite/join, two clients, start, terminal render, deadline, results, home')
+print('PASS: room, join, play, results, same-team rematch, second round, home')
 temp.cleanup()

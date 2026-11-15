@@ -58,12 +58,12 @@ except (ValueError, OSError) as exc:
     st.stop()
 
 if current['status'] == 'playing' and not current['player']['finished']:
-    @st.fragment(run_every='1s')
+    @st.fragment(run_every='5s')
     def play():
         view = store.snapshot(code, token)
-        if view['player']['finished']:
+        if view['round'] != current['round'] or view['status'] != 'playing' or view['player']['finished']:
             st.rerun(scope='app')
-        action = terminal(snapshot=view, key='battle_live_' + code, default=None)
+        action = terminal(snapshot=view, key=f"battle_live_{code}_{view['round']}", default=None)
         if action:
             after = store.snapshot(code, token, action)
             if after['player']['ack'] != view['player']['ack']:
@@ -72,6 +72,7 @@ if current['status'] == 'playing' and not current['player']['finished']:
     st.stop()
 
 st.markdown(f'### 🏆 對戰房間 · {code}')
+st.caption(f"第 {current['round']} 局 · 原房間成員可連續再戰")
 st.caption('測試版｜網站重啟可能清除房間，請勿輸入私人資料。')
 
 if current['status'] == 'lobby':
@@ -79,7 +80,7 @@ if current['status'] == 'lobby':
     <input id="link" readonly style="box-sizing:border-box;width:100%;padding:12px;border-radius:10px;border:1px solid #394252;background:#151b27;color:#e9f0f8;font-size:14px" />
     <div style="color:#9daec3;font:12px system-ui;margin-top:4px">點選連結欄後全選複製，傳給朋友。</div>
     <script>const field=document.getElementById('link');try{const invite=new URL(window.parent.location.href);invite.pathname=invite.pathname.replace('/~/+', '');field.value=invite.toString();field.onclick=()=>field.select()}catch(e){field.value=document.referrer}</script>''', height=94)
-    @st.fragment(run_every='1s')
+    @st.fragment(run_every='5s')
     def members():
         view = store.snapshot(code, token)
         if view['status'] != 'lobby':
@@ -91,6 +92,7 @@ if current['status'] == 'lobby':
     if current['host']:
         name = st.text_input('你的暱稱', value=current['player']['name'], max_chars=16)
         mode = st.radio('對戰方式', ['players', 'benchmark'],
+                        index=0 if current['mode'] == 'players' else 1,
                         format_func=lambda m: '玩家對戰（2–4 人）' if m == 'players' else '人機對戰：0050 定期定額（1 人）', horizontal=True)
         with st.expander('賽事規則與行情'):
             st.info('使用證交所真實歷史日 K，與單人模式相同來源；下載失敗不使用合成行情替代。')
@@ -98,6 +100,7 @@ if current['status'] == 'lobby':
             st.caption('熱門候選池（人工選定，非即時排行）：' + '、'.join(n for _, n in POOL))
             st.write('每人一百萬元；相同隨機股票與二十四交易日，從 2019–2024 抽選。')
             st.write('每根日 K 八秒；沒有決策倒數。Option 十秒、每人最多三次。最長四分鐘，自動平倉。')
+            st.write('每五秒統一更新帳面報酬排名與走勢；Option 只暫停自己，記分板橫軸為開賽經過時間。與前一名的差距以報酬率百分點顯示。')
             st.write('現股買賣：股數、市價／限價；限價按模擬路徑首度觸及成交，預留資金／股數。')
             st.write('0050 每五個交易日投入二十萬元，共五次；未投入現金也計入資產。只比較價格報酬，不含權息／費稅。')
             st.caption('此測試版使用 SQLite；行情會傳至瀏覽器製作動畫，不適用有獎金或需要防作弊的正式競賽。')
@@ -109,16 +112,18 @@ if current['status'] == 'lobby':
                     raise ValueError('人機模式限一位玩家')
                 with st.spinner('載入共同行情，完成後才開始倒數…'):
                     question = prepare()
-                    store.start(code, token, question, mode, name)
+                    store.start(code, token, question, mode, name, expected_round=current['round'])
                 st.rerun()
             except Exception as exc:
                 st.error(f'尚未開賽：{exc}')
     else:
         st.info('已加入，等待房主開始；開賽後自動進入操作頁。')
 else:
-    @st.fragment(run_every='1s')
+    @st.fragment(run_every='5s')
     def settlement():
         view = store.snapshot(code, token)
+        if view['status'] == 'lobby' or view['round'] != current['round']:
+            st.rerun(scope='app')
         if view['status'] == 'playing':
             done = sum(p['finished'] for p in view['board'])
             st.info(f"已完成 {done}/{len(view['board'])}，等待其他玩家；最遲 {max(0,int(view['deadline']-time.time()))} 秒後結算。")
@@ -152,11 +157,15 @@ else:
             st.write('本場成交至少十二次；加入真實費稅後，頻繁進出會增加成本。')
         st.caption('勝率按賣出成交分筆計算，分批賣出會增加樣本；不作人格評分。未計費稅、滑價、股息。')
         st.dataframe(own['fills'], hide_index=True, use_container_width=True)
-        if st.button('再開一個房間', use_container_width=True):
-            for key in ('battle_token', 'battle_code', 'battle_invite'):
-                st.session_state.pop(key, None)
-            st.query_params.clear()
-            st.rerun(scope='app')
+        if view['host']:
+            if st.button('🔁 再來一局（保留隊伍）', type='primary', use_container_width=True):
+                try:
+                    store.rematch(code, token, view['round'])
+                    st.rerun(scope='app')
+                except ValueError as exc:
+                    st.error(str(exc))
+        else:
+            st.info('等待房主開啟下一局；房號與隊伍會保留，不用重新加入。')
     settlement()
 
 if st.button('🏠 回主選單'):
