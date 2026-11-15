@@ -5,7 +5,7 @@ from pathlib import Path
 import unittest
 from battle.engine import *
 from battle import store
-from battle.market import prepare
+from battle_fixtures import question
 
 def bars():
     return [dict(Date=f'day-{i}', Open=100.0, High=110.0, Low=90.0, Close=105.0, Volume=0) for i in range(24)]
@@ -141,7 +141,7 @@ class StoreTests(unittest.TestCase):
     def test_only_host_starts_then_atomic_settlement(self):
         code,token=store.create(path=self.path)
         guest=store.join(code,'Guest',path=self.path)
-        market=prepare(True)
+        market=question()
         with self.assertRaises(ValueError):
             store.start(code,guest,market,'players','Guest',path=self.path)
         store.start(code,token,market,'players','Host',path=self.path)
@@ -164,7 +164,7 @@ class StoreTests(unittest.TestCase):
         code,token=store.create(path=self.path)
         with self.assertRaises(ValueError):
             store.snapshot(code,'fake',path=self.path)
-        store.start(code,token,prepare(True),'benchmark','Me',path=self.path)
+        store.start(code,token,question(),'benchmark','Me',path=self.path)
         view=store.snapshot(code,token,path=self.path)
         end=store.snapshot(code,token,path=self.path,now=view['started']+240)
         self.assertEqual(len(end['board']),2)

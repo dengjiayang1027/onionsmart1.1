@@ -93,7 +93,8 @@ if current['status'] == 'lobby':
         mode = st.radio('對戰方式', ['players', 'benchmark'],
                         format_func=lambda m: '玩家對戰（2–4 人）' if m == 'players' else '人機對戰：0050 定期定額（1 人）', horizontal=True)
         with st.expander('賽事規則與行情'):
-            demo = st.checkbox('使用合成資料試玩（非真實台股）', value=False)
+            st.info('使用證交所真實歷史日 K，與單人模式相同來源；下載失敗不使用合成行情替代。')
+            st.caption('日 K 開高低收為歷史資料；八秒內價格路徑為 OHLC 模擬，非歷史逐筆成交。')
             st.caption('熱門候選池（人工選定，非即時排行）：' + '、'.join(n for _, n in POOL))
             st.write('每人一百萬元；相同隨機股票與二十四交易日，從 2019–2024 抽選。')
             st.write('每根日 K 八秒；沒有決策倒數。Option 十秒、每人最多三次。最長四分鐘，自動平倉。')
@@ -107,7 +108,7 @@ if current['status'] == 'lobby':
                 if mode == 'benchmark' and len(current['board']) != 1:
                     raise ValueError('人機模式限一位玩家')
                 with st.spinner('載入共同行情，完成後才開始倒數…'):
-                    question = prepare(demo)
+                    question = prepare()
                     store.start(code, token, question, mode, name)
                 st.rerun()
             except Exception as exc:

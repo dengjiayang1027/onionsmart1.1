@@ -8,6 +8,8 @@ temp=tempfile.TemporaryDirectory()
 os.environ['ONION_BATTLE_DB']=str(Path(temp.name)/'ui.sqlite3')
 from streamlit.testing.v1 import AppTest
 from battle import store
+from battle_fixtures import question
+from unittest.mock import patch
 page=str(root/'pages/3_多人競賽.py')
 host=AppTest.from_file(page).run(timeout=40)
 assert not host.exception, host.exception
@@ -23,8 +25,9 @@ assert not guest.exception, guest.exception
 assert guest.session_state['battle_code']==code
 host.run()
 assert not host.exception, host.exception
-host.checkbox[0].check().run()
-next(b for b in host.button if b.label=='▶ 開始對戰').click().run()
+assert len(host.checkbox)==0
+with patch('battle.market.prepare', return_value=question()):
+    next(b for b in host.button if b.label=='▶ 開始對戰').click().run()
 assert not host.exception, host.exception
 v=store.snapshot(code,host_token)
 assert v['status']=='playing'
