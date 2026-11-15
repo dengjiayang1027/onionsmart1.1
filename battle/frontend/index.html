@@ -61,7 +61,7 @@ function drawReturns(ts){
   if(!$('race').open)return;
   const animate=!matchMedia('(prefers-reduced-motion: reduce)').matches&&ts-sampleReceived<350;
   if(!returnsDirty&&!animate)return;
-  returnsDirty=false;
+  returnsDirty=animate;
   const canvas=$('returns'),w=canvas.clientWidth,h=canvas.clientHeight,dpr=window.devicePixelRatio||1;
   if(!w)return;
   canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
